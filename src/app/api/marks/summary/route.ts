@@ -10,11 +10,6 @@ import {
 
 export const runtime = "nodejs";
 
-interface CadetLite {
-  number: string;
-  name: string;
-  squadron: number;
-}
 interface SlotRow {
   id: string;
   date: string;
@@ -70,13 +65,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ slots: [], squadronTotals });
   }
 
-  // Marcações + dados do cadete. Paginado (podem ser milhares de linhas) e
-  // filtrado pelo período via join em meal_slots — evita um IN(...) gigante.
-  let marks: Array<{ slot_id: string; cadets: CadetLite }>;
+  // Marcações: só precisamos do esquadrão de cada cadete para CONTAR (a lista
+  // de nomes é carregada sob demanda em /api/marks/detail). Paginado e filtrado
+  // pelo período via join em meal_slots — evita um IN(...) gigante.
+  let marks: Array<{ slot_id: string; cadets: { squadron: number } }>;
   try {
-    marks = await selectAll<{ slot_id: string; cadets: CadetLite }>(
+    marks = await selectAll<{ slot_id: string; cadets: { squadron: number } }>(
       "meal_marks",
-      "id, slot_id, cadets!inner(number, name, squadron), meal_slots!inner(date)",
+      "id, slot_id, cadets!inner(squadron), meal_slots!inner(date)",
       (q) => {
         if (from) q = q.gte("meal_slots.date", from);
         if (to) q = q.lte("meal_slots.date", to);
@@ -87,26 +83,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
 
-  // Agrupa cadetes marcados por slot e por esquadrão.
-  const bySlot = new Map<string, Map<number, CadetLite[]>>();
+  // Conta marcações por slot e por esquadrão.
+  const bySlot = new Map<string, Map<number, number>>();
   for (const m of marks) {
-    const cadet = m.cadets;
-    if (!cadet) continue;
-    const slotId = m.slot_id;
-    if (!bySlot.has(slotId)) bySlot.set(slotId, new Map());
-    const sqMap = bySlot.get(slotId)!;
-    if (!sqMap.has(cadet.squadron)) sqMap.set(cadet.squadron, []);
-    sqMap.get(cadet.squadron)!.push({
-      number: cadet.number,
-      name: cadet.name,
-      squadron: cadet.squadron,
-    });
+    const squadron = m.cadets?.squadron;
+    if (!squadron) continue;
+    if (!bySlot.has(m.slot_id)) bySlot.set(m.slot_id, new Map());
+    const sqMap = bySlot.get(m.slot_id)!;
+    sqMap.set(squadron, (sqMap.get(squadron) ?? 0) + 1);
   }
 
   const result = slotList.map((slot) => {
-    const sqMap = bySlot.get(slot.id) ?? new Map<number, CadetLite[]>();
+    const sqMap = bySlot.get(slot.id) ?? new Map<number, number>();
     const counts: Record<number, number> = {};
-    const cadetsBySquadron: Record<number, CadetLite[]> = {};
     const access: Record<number, string> = {};
     let total = 0;
 
@@ -115,13 +104,10 @@ export async function GET(req: Request) {
       access[sq] = state;
 
       if (state === "opcional") {
-        // Conta quem marcou voluntariamente (e guarda a lista p/ detalhe).
-        const list = (sqMap.get(sq) ?? []).sort((a, b) =>
-          a.number.localeCompare(b.number)
-        );
-        counts[sq] = list.length;
-        cadetsBySquadron[sq] = list;
-        total += list.length;
+        // Conta quem marcou voluntariamente.
+        const n = sqMap.get(sq) ?? 0;
+        counts[sq] = n;
+        total += n;
       } else if (state === "todos") {
         // Refeição obrigatória -> todos do esquadrão comem.
         total += squadronTotals[sq] ?? 0;
@@ -138,7 +124,6 @@ export async function GET(req: Request) {
       locked: slot.locked,
       counts, // só esquadrões "opcional" (marcações voluntárias)
       total, // opcional (marcados) + todos (headcount)
-      cadets: cadetsBySquadron,
     };
   });
 

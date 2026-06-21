@@ -15,7 +15,6 @@ import { apiFetch } from "@/lib/client";
 interface CadetLite {
   number: string;
   name: string;
-  squadron: number;
 }
 
 interface SummarySlot {
@@ -26,7 +25,6 @@ interface SummarySlot {
   locked: boolean;
   counts: Record<number, number>;
   total: number;
-  cadets: Record<number, CadetLite[]>;
 }
 
 interface Props {
@@ -259,7 +257,32 @@ function CadetListModal({
   squadron: number;
   onClose: () => void;
 }) {
-  const list = slot.cadets[squadron] ?? [];
+  const [cadets, setCadets] = useState<CadetLite[] | null>(null);
+  const [error, setError] = useState("");
+
+  // Carrega a lista de cadetes sob demanda (não vem no resumo).
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await apiFetch(
+          `/api/marks/detail?slot_id=${slot.id}&squadron=${squadron}`
+        );
+        const data = await res.json();
+        if (!active) return;
+        if (res.ok) setCadets(data.cadets ?? []);
+        else setError(data.error ?? "Erro ao carregar");
+      } catch {
+        if (active) setError("Erro de conexão");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [slot.id, squadron]);
+
+  const expected = slot.counts[squadron] ?? 0;
+
   return (
     <div
       className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-4 sm:items-center"
@@ -274,18 +297,30 @@ function CadetListModal({
             {MEAL_SHORT[slot.meal_type]} · {formatShortDate(slot.date)}
           </h3>
           <p className="text-sm text-slate-500">
-            {SQUADRON_LABELS[squadron]} — {list.length} marcaram “Sim”
+            {SQUADRON_LABELS[squadron]} — {expected} marcaram “Sim”
           </p>
         </div>
         <div className="-mx-1 flex-1 overflow-y-auto px-1">
-          <ul className="divide-y divide-slate-100">
-            {list.map((c) => (
-              <li key={c.number} className="flex items-center gap-3 py-2.5">
-                <span className="font-mono text-sm text-slate-500">{c.number}</span>
-                <span className="font-medium text-slate-700">{c.name}</span>
-              </li>
-            ))}
-          </ul>
+          {error ? (
+            <p className="py-6 text-center text-sm text-red-600">{error}</p>
+          ) : cadets === null ? (
+            <p className="py-6 text-center text-sm text-slate-400">Carregando…</p>
+          ) : cadets.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-400">
+              Nenhum cadete marcou “Sim”.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {cadets.map((c) => (
+                <li key={c.number} className="flex items-center gap-3 py-2.5">
+                  <span className="font-mono text-sm text-slate-500">
+                    {c.number}
+                  </span>
+                  <span className="font-medium text-slate-700">{c.name}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <button className="btn-secondary mt-4" onClick={onClose}>
           Fechar

@@ -124,7 +124,7 @@ Acesse [http://localhost:3000](http://localhost:3000).
 
 | Método | Rota | Descrição |
 | --- | --- | --- |
-| POST | `/api/auth/login` | Login, retorna JWT em cookie |
+| POST | `/api/auth/login` | Login (rate-limit: 5 falhas/15 min por número), retorna JWT em cookie |
 | POST | `/api/auth/logout` | Limpa o cookie |
 | POST | `/api/auth/change-password` | Troca de senha (mín. 6 caracteres) |
 | GET | `/api/slots` | Slots (cadete: do seu esquadrão com marcação; admin: todos) |
@@ -133,7 +133,8 @@ Acesse [http://localhost:3000](http://localhost:3000).
 | PUT | `/api/slots/lock` | (admin) bloqueia/desbloqueia em lote |
 | GET | `/api/marks` | Marcações do cadete logado |
 | PUT | `/api/marks` | Marca/desmarca uma refeição (valida lock + esquadrão) |
-| GET | `/api/marks/summary` | (admin) contagens + detalhe dos cadetes |
+| GET | `/api/marks/summary` | (admin) contagens por slot/esquadrão (sem nomes) |
+| GET | `/api/marks/detail` | (admin) lista de cadetes de um slot/esquadrão (sob demanda) |
 | GET | `/api/marks/export` | (admin) gera o Excel (.xlsx) — abas por esquadrão + Resumo |
 
 ---
