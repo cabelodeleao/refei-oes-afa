@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
-import { getAccess } from "@/lib/constants";
+import { getAccess, isOptOutSquadron } from "@/lib/constants";
 
 export const runtime = "nodejs";
 
@@ -18,12 +18,13 @@ export async function GET(req: Request) {
   const to = searchParams.get("to");
 
   // Paginado e filtrado por período via join em meal_slots.
+  // Apenas opt-ins (attending=true) = refeições marcadas como "Sim".
   try {
     const marks = await selectAll<{ slot_id: string }>(
       "meal_marks",
       from || to ? "id, slot_id, meal_slots!inner(date)" : "id, slot_id",
       (q) => {
-        q = q.eq("cadet_id", session.sub);
+        q = q.eq("cadet_id", session.sub).eq("attending", true);
         if (from) q = q.gte("meal_slots.date", from);
         if (to) q = q.lte("meal_slots.date", to);
         return q;
@@ -88,31 +89,42 @@ export async function PUT(req: Request) {
       { status: 403 }
     );
   }
-  if (access === "todos") {
+  // "todos" estrito (1º e 2º esq.): não pode alterar.
+  // "todos" opt-out (3º e 4º esq.): pode desmarcar, default é "Sim".
+  if (access === "todos" && !isOptOutSquadron(session.squadron)) {
     return NextResponse.json(
       { error: "Refeição obrigatória — não é possível desmarcar" },
       { status: 409 }
     );
   }
 
-  if (marked) {
+  const isOptOut = access === "todos"; // aqui só chega 3º/4º (estrito já barrado)
+
+  // Modelo de armazenamento (uma linha = escolha explícita):
+  //  - opcional: "Sim" => linha attending=true; "Não" => sem linha (default Não).
+  //  - opt-out:  "Sim" => sem linha (default Sim);  "Não" => linha attending=false.
+  const storeRow = isOptOut ? !marked : marked; // precisamos persistir uma linha?
+  const attending = marked; // a escolha do cadete
+
+  if (storeRow) {
     const { error } = await supabaseAdmin
       .from("meal_marks")
       .upsert(
-        { cadet_id: session.sub, slot_id: slotId },
-        { onConflict: "cadet_id,slot_id", ignoreDuplicates: true }
+        { cadet_id: session.sub, slot_id: slotId, attending },
+        { onConflict: "cadet_id,slot_id" }
       );
     if (error) {
-      return NextResponse.json({ error: "Erro ao marcar" }, { status: 500 });
+      return NextResponse.json({ error: "Erro ao salvar" }, { status: 500 });
     }
   } else {
+    // Volta ao default do modo: remove qualquer linha existente.
     const { error } = await supabaseAdmin
       .from("meal_marks")
       .delete()
       .eq("cadet_id", session.sub)
       .eq("slot_id", slotId);
     if (error) {
-      return NextResponse.json({ error: "Erro ao desmarcar" }, { status: 500 });
+      return NextResponse.json({ error: "Erro ao salvar" }, { status: 500 });
     }
   }
 

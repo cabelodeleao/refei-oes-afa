@@ -5,6 +5,7 @@ import {
   MEAL_TYPES,
   ACCESS_STATES,
   getAccess,
+  isOptOutSquadron,
   type MealType,
   type AccessState,
   type SquadronAccess,
@@ -60,28 +61,45 @@ export async function GET(req: Request) {
     .map((s) => ({ ...s, access: getAccess(s.squadrons, session.squadron) }))
     .filter((s) => s.access !== "ninguem");
 
-  // Todas as marcações do cadete (paginado). Só consultamos as visíveis depois.
-  let markedSet = new Set<string>();
+  // Escolhas explícitas do cadete (paginado): opt-ins e opt-outs.
+  const optInSet = new Set<string>(); // attending=true  (Sim em opcional)
+  const optOutSet = new Set<string>(); // attending=false (Não em opt-out)
   try {
-    const marks = await selectAll<{ slot_id: string }>(
+    const marks = await selectAll<{ slot_id: string; attending: boolean }>(
       "meal_marks",
-      "id, slot_id",
+      "id, slot_id, attending",
       (q) => q.eq("cadet_id", session.sub)
     );
-    markedSet = new Set(marks.map((m) => m.slot_id));
+    for (const m of marks) {
+      if (m.attending) optInSet.add(m.slot_id);
+      else optOutSet.add(m.slot_id);
+    }
   } catch {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
 
+  const optOut = isOptOutSquadron(session.squadron);
+
   return NextResponse.json({
-    slots: visible.map((s) => ({
-      id: s.id,
-      date: s.date,
-      meal_type: s.meal_type,
-      locked: s.locked,
-      access: s.access, // "opcional" | "todos"
-      marked: s.access === "todos" ? true : markedSet.has(s.id),
-    })),
+    slots: visible.map((s) => {
+      let marked: boolean;
+      if (s.access === "opcional") {
+        marked = optInSet.has(s.id); // default Não
+      } else if (optOut) {
+        // "todos" opt-out (3º/4º): default Sim, exceto se desmarcou.
+        marked = !optOutSet.has(s.id);
+      } else {
+        marked = true; // "todos" estrito (1º/2º)
+      }
+      return {
+        id: s.id,
+        date: s.date,
+        meal_type: s.meal_type,
+        locked: s.locked,
+        access: s.access, // "opcional" | "todos"
+        marked,
+      };
+    }),
   });
 }
 

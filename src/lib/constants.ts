@@ -30,6 +30,13 @@ export const ACCESS_LABELS: Record<AccessState, string> = {
   ninguem: "Ninguém",
 };
 
+// Esquadrões em que "todos" funciona como "opt-out" (pré-marcado, mas o cadete
+// pode desmarcar): 3º (24/xxx) e 4º (23/xxx). Para 1º e 2º "todos" é estrito.
+export const OPT_OUT_SQUADRONS = [3, 4] as const;
+export function isOptOutSquadron(squadron: number): boolean {
+  return squadron === 3 || squadron === 4;
+}
+
 // squadrons é um objeto JSONB: { "1": "opcional", "2": "todos", ... }
 export type SquadronAccess = Record<string, AccessState>;
 

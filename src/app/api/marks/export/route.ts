@@ -9,6 +9,7 @@ import {
   SQUADRON_LABELS,
   SQUADRON_SHORT,
   getAccess,
+  isOptOutSquadron,
   type MealType,
   type SquadronAccess,
 } from "@/lib/constants";
@@ -102,13 +103,13 @@ export async function GET(req: Request) {
     bySquadron.get(sq)!.sort((a, b) => a.number.localeCompare(b.number));
   }
 
-  // --- Marcações: Set "cadetId|slotId" e contagem voluntária por slot/esquadrão.
+  // --- Marcações (escolhas explícitas): opt-in (attending=true) e opt-out (false).
   // Paginado e filtrado pelo período via join em meal_slots (evita IN gigante).
-  let marksData: Array<{ cadet_id: string; slot_id: string }>;
+  let marksData: Array<{ cadet_id: string; slot_id: string; attending: boolean }>;
   try {
-    marksData = await selectAll<{ cadet_id: string; slot_id: string }>(
+    marksData = await selectAll(
       "meal_marks",
-      "id, cadet_id, slot_id, meal_slots!inner(date)",
+      "id, cadet_id, slot_id, attending, meal_slots!inner(date)",
       (q) => {
         if (from) q = q.gte("meal_slots.date", from);
         if (to) q = q.lte("meal_slots.date", to);
@@ -118,18 +119,35 @@ export async function GET(req: Request) {
   } catch {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
-  const markedSet = new Set<string>();
-  const simCount = new Map<string, number>(); // "slotId|squadron" -> nº de "Sim"
+  const optInSet = new Set<string>(); // "cadetId|slotId" attending=true  ("Sim")
+  const optOutSet = new Set<string>(); // "cadetId|slotId" attending=false ("Não")
+  const optInCount = new Map<string, number>(); // "slotId|sq" -> nº opt-in
+  const optOutCount = new Map<string, number>(); // "slotId|sq" -> nº opt-out
   for (const m of marksData) {
-    const cadetId = m.cadet_id;
-    const slotId = m.slot_id;
-    markedSet.add(`${cadetId}|${slotId}`);
-    const sq = cadetSquadron.get(cadetId);
-    if (sq) {
-      const k = `${slotId}|${sq}`;
-      simCount.set(k, (simCount.get(k) ?? 0) + 1);
+    const key = `${m.cadet_id}|${m.slot_id}`;
+    const sq = cadetSquadron.get(m.cadet_id);
+    const ckey = `${m.slot_id}|${sq}`;
+    if (m.attending) {
+      optInSet.add(key);
+      if (sq) optInCount.set(ckey, (optInCount.get(ckey) ?? 0) + 1);
+    } else {
+      optOutSet.add(key);
+      if (sq) optOutCount.set(ckey, (optOutCount.get(ckey) ?? 0) + 1);
     }
   }
+
+  // Nº de cadetes que comem em (slot, esquadrão), conforme o modo.
+  const eatNumber = (s: SlotRow, sq: number): number => {
+    const state = getAccess(s.squadrons, sq);
+    if (state === "opcional") return optInCount.get(`${s.id}|${sq}`) ?? 0;
+    if (state === "todos") {
+      const roster = bySquadron.get(sq)!.length;
+      return isOptOutSquadron(sq)
+        ? roster - (optOutCount.get(`${s.id}|${sq}`) ?? 0)
+        : roster;
+    }
+    return 0; // ninguem
+  };
 
   const slotHeader = (s: SlotRow) =>
     `${formatShortDate(s.date)} - ${MEAL_SHORT[s.meal_type]}`;
@@ -159,16 +177,12 @@ export async function GET(req: Request) {
     const row: Record<string, string | number> = { meal: slotHeader(s) };
     for (const sq of ALL_SQUADRONS) {
       const state = getAccess(s.squadrons, sq);
-      if (state === "opcional") {
-        const v = simCount.get(`${s.id}|${sq}`) ?? 0;
-        row[`sq${sq}`] = v;
-        total += v;
-      } else if (state === "todos") {
-        const v = bySquadron.get(sq)!.length;
-        row[`sq${sq}`] = v;
-        total += v;
-      } else {
+      if (state === "ninguem") {
         row[`sq${sq}`] = "-";
+      } else {
+        const v = eatNumber(s, sq);
+        row[`sq${sq}`] = v;
+        total += v;
       }
     }
     row.total = total;
@@ -210,32 +224,33 @@ export async function GET(req: Request) {
       };
       for (const s of sheetSlots) {
         const state = getAccess(s.squadrons, sq);
-        row[s.id] =
-          state === "todos"
-            ? "Obrigatória"
-            : markedSet.has(`${c.id}|${s.id}`)
-              ? "Sim"
-              : "Não";
+        if (state === "todos" && !isOptOutSquadron(sq)) {
+          // 1º/2º: obrigatória estrita.
+          row[s.id] = "Obrigatória";
+        } else if (state === "todos") {
+          // 3º/4º: default "Sim", "Não" se desmarcou.
+          row[s.id] = optOutSet.has(`${c.id}|${s.id}`) ? "Não" : "Sim";
+        } else {
+          // opcional: "Sim" se marcou (opt-in).
+          row[s.id] = optInSet.has(`${c.id}|${s.id}`) ? "Sim" : "Não";
+        }
       }
       const added = ws.addRow(row);
-      sheetSlots.forEach((s, i) => {
+      sheetSlots.forEach((_, i) => {
         const cell = added.getCell(3 + i);
-        const state = getAccess(s.squadrons, sq);
-        if (state === "todos") cell.fill = solid(TODOS_FILL);
+        if (cell.value === "Obrigatória") cell.fill = solid(TODOS_FILL);
         else if (cell.value === "Sim") cell.fill = solid(YES_FILL);
         cell.alignment = { horizontal: "center" };
       });
     }
 
-    // Linha de total: opcional = nº de "Sim"; todos = efetivo (todos comem).
+    // Linha de total: nº de quem come (opcional=opt-ins; todos=efetivo - opt-outs).
     const totalRow: Record<string, string | number> = {
       number: "TOTAL",
       name: "",
     };
     for (const s of sheetSlots) {
-      const state = getAccess(s.squadrons, sq);
-      totalRow[s.id] =
-        state === "todos" ? roster.length : simCount.get(`${s.id}|${sq}`) ?? 0;
+      totalRow[s.id] = eatNumber(s, sq);
     }
     const added = ws.addRow(totalRow);
     added.font = { bold: true };

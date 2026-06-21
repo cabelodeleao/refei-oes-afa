@@ -39,12 +39,16 @@ create table if not exists public.meal_slots (
 
 -- --------------------------------------------------------------------------
 -- Tabela: meal_marks
--- Uma linha existe = cadete marcou "Sim". Sem linha = "Não".
+-- Uma linha registra a ESCOLHA explícita do cadete para um slot:
+--   attending = true  -> opt-in  ("Sim" em refeição opcional)
+--   attending = false -> opt-out ("Não" em refeição "todos" p/ 3º e 4º esq.)
+-- Sem linha = default do modo (opcional => "Não"; "todos" => "Sim").
 -- --------------------------------------------------------------------------
 create table if not exists public.meal_marks (
   id         uuid primary key default gen_random_uuid(),
   cadet_id   uuid not null references public.cadets(id) on delete cascade,
   slot_id    uuid not null references public.meal_slots(id) on delete cascade,
+  attending  boolean not null default true,
   created_at timestamptz default now(),
   unique (cadet_id, slot_id)
 );

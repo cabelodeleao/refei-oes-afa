@@ -33,7 +33,11 @@ export async function GET(req: Request) {
     const marks = await selectAll<{ cadets: CadetLite }>(
       "meal_marks",
       "id, cadets!inner(number, name, squadron)",
-      (q) => q.eq("slot_id", slotId).eq("cadets.squadron", squadron)
+      (q) =>
+        q
+          .eq("slot_id", slotId)
+          .eq("attending", true) // opt-ins = quem marcou "Sim"
+          .eq("cadets.squadron", squadron)
     );
 
     const cadets = marks

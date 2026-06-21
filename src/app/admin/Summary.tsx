@@ -36,9 +36,6 @@ interface Props {
 
 export default function Summary({ from, to, setFrom, setTo }: Props) {
   const [slots, setSlots] = useState<SummarySlot[]>([]);
-  const [squadronTotals, setSquadronTotals] = useState<Record<number, number>>(
-    {}
-  );
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [detail, setDetail] = useState<{
@@ -53,7 +50,6 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
       const data = await res.json();
       if (res.ok) {
         setSlots(data.slots ?? []);
-        setSquadronTotals(data.squadronTotals ?? {});
       }
     } finally {
       setLoading(false);
@@ -172,15 +168,20 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
                     const state = s.access[sq] ?? "ninguem";
 
                     if (state === "todos") {
-                      // Refeição obrigatória: todos do esquadrão comem.
-                      const headcount = squadronTotals[sq] ?? 0;
+                      // Obrigatória: 1º/2º = efetivo fixo; 3º/4º = efetivo - opt-outs.
+                      const eaters = s.counts[sq] ?? 0;
+                      const optOutSq = sq === 3 || sq === 4;
                       return (
                         <td key={sq} className="px-3 py-3 text-center">
                           <span
                             className="inline-block rounded-lg bg-emerald-100 px-2 py-1 font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200"
-                            title="Obrigatória — todos do esquadrão"
+                            title={
+                              optOutSq
+                                ? "Obrigatória (3º/4º podem desmarcar) — efetivo menos quem desmarcou"
+                                : "Obrigatória — todos do esquadrão"
+                            }
                           >
-                            {headcount}
+                            {eaters}
                           </span>
                         </td>
                       );

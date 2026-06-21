@@ -3,6 +3,7 @@ import { selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import {
   getAccess,
+  isOptOutSquadron,
   MEAL_TYPES,
   type MealType,
   type SquadronAccess,
@@ -68,11 +69,15 @@ export async function GET(req: Request) {
   // Marcações: só precisamos do esquadrão de cada cadete para CONTAR (a lista
   // de nomes é carregada sob demanda em /api/marks/detail). Paginado e filtrado
   // pelo período via join em meal_slots — evita um IN(...) gigante.
-  let marks: Array<{ slot_id: string; cadets: { squadron: number } }>;
+  let marks: Array<{
+    slot_id: string;
+    attending: boolean;
+    cadets: { squadron: number };
+  }>;
   try {
-    marks = await selectAll<{ slot_id: string; cadets: { squadron: number } }>(
+    marks = await selectAll(
       "meal_marks",
-      "id, slot_id, cadets!inner(squadron), meal_slots!inner(date)",
+      "id, slot_id, attending, cadets!inner(squadron), meal_slots!inner(date)",
       (q) => {
         if (from) q = q.gte("meal_slots.date", from);
         if (to) q = q.lte("meal_slots.date", to);
@@ -83,18 +88,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
 
-  // Conta marcações por slot e por esquadrão.
-  const bySlot = new Map<string, Map<number, number>>();
+  // Por slot/esquadrão: opt-ins (attending=true) e opt-outs (attending=false).
+  const optIn = new Map<string, number>(); // "slotId|sq" -> nº de "Sim" (opcional)
+  const optOut = new Map<string, number>(); // "slotId|sq" -> nº de "Não" (opt-out)
   for (const m of marks) {
     const squadron = m.cadets?.squadron;
     if (!squadron) continue;
-    if (!bySlot.has(m.slot_id)) bySlot.set(m.slot_id, new Map());
-    const sqMap = bySlot.get(m.slot_id)!;
-    sqMap.set(squadron, (sqMap.get(squadron) ?? 0) + 1);
+    const key = `${m.slot_id}|${squadron}`;
+    const target = m.attending ? optIn : optOut;
+    target.set(key, (target.get(key) ?? 0) + 1);
   }
 
   const result = slotList.map((slot) => {
-    const sqMap = bySlot.get(slot.id) ?? new Map<number, number>();
     const counts: Record<number, number> = {};
     const access: Record<number, string> = {};
     let total = 0;
@@ -102,17 +107,27 @@ export async function GET(req: Request) {
     for (const sq of [1, 2, 3, 4]) {
       const state = getAccess(slot.squadrons, sq);
       access[sq] = state;
+      const key = `${slot.id}|${sq}`;
 
       if (state === "opcional") {
-        // Conta quem marcou voluntariamente.
-        const n = sqMap.get(sq) ?? 0;
+        // Quem marcou voluntariamente (opt-in).
+        const n = optIn.get(key) ?? 0;
         counts[sq] = n;
         total += n;
       } else if (state === "todos") {
-        // Refeição obrigatória -> todos do esquadrão comem.
-        total += squadronTotals[sq] ?? 0;
+        if (isOptOutSquadron(sq)) {
+          // 3º/4º: todos comem menos quem desmarcou (opt-out).
+          const n = (squadronTotals[sq] ?? 0) - (optOut.get(key) ?? 0);
+          counts[sq] = n;
+          total += n;
+        } else {
+          // 1º/2º: efetivo fixo (obrigatória estrita).
+          const n = squadronTotals[sq] ?? 0;
+          counts[sq] = n;
+          total += n;
+        }
       }
-      // "ninguem" não soma nada.
+      // "ninguem" não soma nada (sem entrada em counts).
     }
 
     return {
@@ -122,8 +137,8 @@ export async function GET(req: Request) {
       squadrons: slot.squadrons,
       access, // estado por esquadrão: opcional | todos | ninguem
       locked: slot.locked,
-      counts, // só esquadrões "opcional" (marcações voluntárias)
-      total, // opcional (marcados) + todos (headcount)
+      counts, // nº a exibir por esquadrão (opcional=opt-in; todos=efetivo - opt-outs)
+      total,
     };
   });
 

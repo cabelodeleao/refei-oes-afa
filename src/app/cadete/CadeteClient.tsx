@@ -9,6 +9,7 @@ import {
   MEAL_TYPES,
   MEAL_LABELS,
   SQUADRON_LABELS,
+  isOptOutSquadron,
   type MealType,
   type AccessState,
 } from "@/lib/constants";
@@ -60,8 +61,18 @@ export default function CadeteClient({ user }: Props) {
       .map(([date, daySlots]) => ({ date, daySlots }));
   }, [slots]);
 
+  // 3º/4º esquadrão podem desmarcar refeições "todos" (opt-out).
+  const optOut = isOptOutSquadron(user.squadron);
+
+  // Pode alternar: opcional sempre; "todos" só p/ 3º/4º; nunca se bloqueado.
+  function canToggle(slot: Slot): boolean {
+    if (slot.locked) return false;
+    if (slot.access === "opcional") return true;
+    return optOut; // access === "todos"
+  }
+
   async function toggle(slot: Slot, next: boolean) {
-    if (slot.locked || slot.access !== "opcional" || pending.has(slot.id)) return;
+    if (!canToggle(slot) || pending.has(slot.id)) return;
     // Atualização otimista
     setSlots((prev) =>
       prev.map((s) => (s.id === slot.id ? { ...s, marked: next } : s))
@@ -141,7 +152,10 @@ export default function CadeteClient({ user }: Props) {
                   daySlots.some((s) => s.meal_type === mt)
                 ).map((mt) => {
                   const slot = daySlots.find((s) => s.meal_type === mt)!;
-                  const mandatory = slot.access === "todos";
+                  // "todos" estrito (1º/2º) = obrigatória sem desmarcar.
+                  // "todos" opt-out (3º/4º) = pré-marcada, mas pode desmarcar.
+                  const strict = slot.access === "todos" && !optOut;
+                  const optOutMeal = slot.access === "todos" && optOut;
                   return (
                     <li
                       key={slot.id}
@@ -158,7 +172,7 @@ export default function CadeteClient({ user }: Props) {
                           {MEAL_LABELS[mt]}
                         </p>
                         <p className="text-xs">
-                          {mandatory ? (
+                          {strict ? (
                             <span className="font-semibold text-emerald-600">
                               Obrigatória — todos do esquadrão
                             </span>
@@ -166,6 +180,18 @@ export default function CadeteClient({ user }: Props) {
                             <span className="text-slate-400">
                               🔒 Bloqueado ·{" "}
                               {slot.marked ? "você marcou Sim" : "você marcou Não"}
+                            </span>
+                          ) : optOutMeal ? (
+                            <span
+                              className={
+                                slot.marked
+                                  ? "font-semibold text-emerald-600"
+                                  : "font-medium text-amber-600"
+                              }
+                            >
+                              {slot.marked
+                                ? "Obrigatória (você pode desmarcar)"
+                                : "Você desmarcou — não vai comer"}
                             </span>
                           ) : (
                             <span
@@ -180,7 +206,7 @@ export default function CadeteClient({ user }: Props) {
                           )}
                         </p>
                       </div>
-                      {mandatory ? (
+                      {strict ? (
                         <span className="chip shrink-0 bg-emerald-100 px-2.5 py-1 text-emerald-700">
                           Obrigatória
                         </span>
