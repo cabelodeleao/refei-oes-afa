@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Toggle from "@/components/Toggle";
 import ChangePassword from "@/components/ChangePassword";
 import LogoutButton from "@/components/LogoutButton";
+import ThemeToggle from "@/components/ThemeToggle";
 import { apiFetch } from "@/lib/client";
 import {
   MEAL_TYPES,
@@ -15,6 +16,7 @@ import {
   type AccessState,
 } from "@/lib/constants";
 import MenuBanner from "@/components/MenuBanner";
+import { useToast } from "@/components/Toast";
 import { formatLongDate } from "@/lib/dates";
 
 interface Slot {
@@ -31,6 +33,7 @@ interface Props {
 }
 
 export default function CadeteClient({ user }: Props) {
+  const toast = useToast();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<Set<string>>(new Set());
@@ -91,11 +94,15 @@ export default function CadeteClient({ user }: Props) {
         setSlots((prev) =>
           prev.map((s) => (s.id === slot.id ? { ...s, marked: !next } : s))
         );
+        toast.error("Não foi possível salvar. Tente novamente.");
+      } else {
+        toast.success("Refeições salvas com sucesso! ✓");
       }
     } catch {
       setSlots((prev) =>
         prev.map((s) => (s.id === slot.id ? { ...s, marked: !next } : s))
       );
+      toast.error("Erro de conexão.");
     } finally {
       setPending((p) => {
         const n = new Set(p);
@@ -118,27 +125,34 @@ export default function CadeteClient({ user }: Props) {
               {user.number} · {SQUADRON_LABELS[user.squadron] ?? "—"}
             </p>
           </div>
-          <LogoutButton />
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle />
+            <LogoutButton />
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-5">
         <MenuBanner />
 
-        <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
           Refeições
         </h2>
 
         {loading && (
-          <div className="card p-8 text-center text-slate-500">Carregando…</div>
+          <div className="card p-8 text-center text-slate-500 dark:text-gray-400">
+            Carregando…
+          </div>
         )}
 
         {error && !loading && (
-          <div className="card p-6 text-center text-red-600">{error}</div>
+          <div className="card p-6 text-center text-red-600 dark:text-red-400">
+            {error}
+          </div>
         )}
 
         {!loading && !error && days.length === 0 && (
-          <div className="card p-8 text-center text-slate-500">
+          <div className="card p-8 text-center text-slate-500 dark:text-gray-400">
             Nenhuma refeição disponível no momento
           </div>
         )}
@@ -150,12 +164,12 @@ export default function CadeteClient({ user }: Props) {
               className="card overflow-hidden animate-fade-in-up"
               style={{ animationDelay: `${Math.min(i * 60, 360)}ms` }}
             >
-              <div className="border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-5 py-3.5">
-                <h3 className="font-semibold capitalize text-navy-800">
+              <div className="border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-5 py-3.5 dark:border-gray-700 dark:from-gray-700/40 dark:to-gray-800">
+                <h3 className="font-semibold capitalize text-navy-800 dark:text-gray-100">
                   {formatLongDate(date)}
                 </h3>
               </div>
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-slate-100 dark:divide-gray-700">
                 {MEAL_TYPES.filter((mt) =>
                   daySlots.some((s) => s.meal_type === mt)
                 ).map((mt) => {
@@ -168,15 +182,17 @@ export default function CadeteClient({ user }: Props) {
                     <li
                       key={slot.id}
                       className={`flex items-center justify-between gap-4 px-5 py-4 transition-colors ${
-                        slot.locked ? "bg-slate-50" : "hover:bg-slate-50/60"
+                        slot.locked
+                          ? "bg-slate-50 dark:bg-gray-700/30"
+                          : "hover:bg-slate-50/60 dark:hover:bg-gray-700/40"
                       }`}
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span
                           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg ring-1 ring-inset ${
                             slot.locked
-                              ? "bg-slate-100 text-slate-300 ring-slate-200"
-                              : "bg-navy-50 ring-navy-100"
+                              ? "bg-slate-100 text-slate-300 ring-slate-200 dark:bg-gray-700 dark:text-gray-500 dark:ring-gray-600"
+                              : "bg-navy-50 ring-navy-100 dark:bg-gray-700 dark:ring-gray-600"
                           }`}
                           aria-hidden
                         >
@@ -185,7 +201,9 @@ export default function CadeteClient({ user }: Props) {
                         <div className="min-w-0">
                         <p
                           className={`font-medium ${
-                            slot.locked ? "text-slate-400" : "text-slate-700"
+                            slot.locked
+                              ? "text-slate-400 dark:text-gray-500"
+                              : "text-slate-700 dark:text-gray-200"
                           }`}
                         >
                           {MEAL_LABELS[mt]}
@@ -249,7 +267,7 @@ export default function CadeteClient({ user }: Props) {
           <ChangePassword />
         </div>
 
-        <p className="pb-6 pt-2 text-center text-xs text-slate-400">
+        <p className="pb-6 pt-2 text-center text-xs text-slate-400 dark:text-gray-600">
           Refeições AFA
         </p>
       </main>

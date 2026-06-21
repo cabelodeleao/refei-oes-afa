@@ -21,6 +21,7 @@ import {
   parseISODate,
 } from "@/lib/dates";
 import { apiFetch } from "@/lib/client";
+import { useToast } from "@/components/Toast";
 
 interface Slot {
   id: string;
@@ -59,6 +60,7 @@ interface Props {
 }
 
 export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
+  const toast = useToast();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -68,7 +70,6 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     access: AccessMap;
     existing?: Slot;
   } | null>(null);
-  const [toast, setToast] = useState<string>("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,11 +85,6 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
   useEffect(() => {
     load();
   }, [load]);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  }
 
   function shiftWeek(dir: number) {
     setSelected(new Set());
@@ -120,10 +116,10 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
       body: JSON.stringify({ slot_ids: [...selected], locked }),
     });
     if (res.ok) {
-      showToast(locked ? "Refeições bloqueadas" : "Refeições desbloqueadas");
+      toast.success(locked ? "Refeições bloqueadas!" : "Refeições desbloqueadas!");
       setSelected(new Set());
       load();
-    } else showToast("Erro ao atualizar bloqueio");
+    } else toast.error("Erro ao atualizar bloqueio.");
   }
 
   async function bulkDelete() {
@@ -136,16 +132,16 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
       body: JSON.stringify({ slot_ids: [...selected] }),
     });
     if (res.ok) {
-      showToast("Refeições removidas");
+      toast.success("Refeições removidas!");
       setSelected(new Set());
       load();
-    } else showToast("Erro ao remover");
+    } else toast.error("Erro ao remover.");
   }
 
   async function saveEdit() {
     if (!editing) return;
     if (!hasAnyAccess(editing.access)) {
-      showToast("Defina ao menos um esquadrão como Opcional ou Todos");
+      toast.error("Defina ao menos um esquadrão como Opcional ou Todos.");
       return;
     }
     const res = await apiFetch("/api/slots", {
@@ -162,10 +158,10 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
       }),
     });
     if (res.ok) {
-      showToast("Refeição salva");
+      toast.success("Refeição salva!");
       setEditing(null);
       load();
-    } else showToast("Erro ao salvar");
+    } else toast.error("Erro ao salvar.");
   }
 
   return (
@@ -174,17 +170,21 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
         defaultFrom={from}
         defaultTo={to}
         existing={slots}
-        onCreated={(msg) => {
-          showToast(msg);
-          load();
+        onCreated={(msg, ok = true) => {
+          if (ok) {
+            toast.success(msg);
+            load();
+          } else {
+            toast.error(msg);
+          }
         }}
       />
 
       {/* Grid de slots existentes */}
       <section className="card overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-gray-700 px-5 py-4">
           <div>
-            <h2 className="font-bold text-navy-800">Refeições criadas</h2>
+            <h2 className="font-bold text-navy-800 dark:text-gray-100">Refeições criadas</h2>
             <p className="text-xs text-slate-500">
               {formatShortDate(from)} a {formatShortDate(to)}
             </p>
@@ -211,21 +211,21 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
         </div>
 
         {/* Filtro manual de período */}
-        <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-slate-50/50 px-5 py-3 text-sm">
+        <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 dark:border-gray-700 bg-slate-50/50 px-5 py-3 text-sm dark:bg-gray-800/40">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-500">De</span>
+            <span className="text-xs font-medium text-slate-500 dark:text-gray-400">De</span>
             <input
               type="date"
-              className="rounded-lg border border-slate-300 px-2 py-1.5"
+              className="rounded-lg border border-slate-300 px-2 py-1.5 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-500">Até</span>
+            <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Até</span>
             <input
               type="date"
-              className="rounded-lg border border-slate-300 px-2 py-1.5"
+              className="rounded-lg border border-slate-300 px-2 py-1.5 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
               value={to}
               onChange={(e) => setTo(e.target.value)}
             />
@@ -233,8 +233,8 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
         </div>
 
         {/* Ações em lote + legenda */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <span className="text-sm text-slate-500">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-gray-700 px-5 py-3">
+          <span className="text-sm text-slate-500 dark:text-gray-400">
             {selected.size} selecionada(s)
           </span>
           <button
@@ -269,7 +269,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
-              <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-gray-700/40 dark:text-gray-400">
                 <th className="px-4 py-2.5 font-semibold">Dia</th>
                 {MEAL_TYPES.map((mt) => (
                   <th key={mt} className="px-3 py-2.5 font-semibold">
@@ -278,14 +278,14 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
               {days.map((d) => (
                 <tr key={d} className="align-top">
                   <td className="whitespace-nowrap px-4 py-3">
-                    <div className="font-semibold text-navy-800">
+                    <div className="font-semibold text-navy-800 dark:text-gray-100">
                       {formatShortDate(d)}
                     </div>
-                    <div className="text-xs capitalize text-slate-400">
+                    <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
                       {weekdayShort(d)}
                     </div>
                   </td>
@@ -332,12 +332,6 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
           onSave={saveEdit}
         />
       )}
-
-      {toast && (
-        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-navy-800 px-4 py-2.5 text-sm font-medium text-white shadow-lg animate-fade-in">
-          {toast}
-        </div>
-      )}
     </div>
   );
 }
@@ -368,7 +362,7 @@ function AccessSelector({
     { key: "ninguem", active: "bg-slate-400 text-white" },
   ];
   return (
-    <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-slate-300">
+    <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-slate-300 dark:ring-gray-600">
       {options.map((o, i) => (
         <button
           key={o.key}
@@ -376,9 +370,11 @@ function AccessSelector({
           disabled={disabled}
           onClick={() => onChange(o.key)}
           className={`px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
-            i > 0 ? "border-l border-slate-300" : ""
+            i > 0 ? "border-l border-slate-300 dark:border-gray-600" : ""
           } ${
-            value === o.key ? o.active : "bg-white text-slate-500 hover:bg-slate-50"
+            value === o.key
+              ? o.active
+              : "bg-white text-slate-500 hover:bg-slate-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
           }`}
         >
           {ACCESS_LABELS[o.key]}
@@ -405,7 +401,7 @@ function GridCell({
     return (
       <button
         onClick={onClick}
-        className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-slate-200 px-2 py-2 text-slate-300 transition hover:border-navy-400 hover:text-navy-500"
+        className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-slate-200 px-2 py-2 text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300"
         title="Criar refeição"
       >
         +
@@ -415,7 +411,9 @@ function GridCell({
   return (
     <div
       className={`rounded-lg border px-2 py-2 transition ${
-        slot.locked ? "border-slate-200 bg-slate-100" : "border-slate-200 bg-white"
+        slot.locked
+          ? "border-slate-200 bg-slate-100 dark:border-gray-600 dark:bg-gray-700/50"
+          : "border-slate-200 bg-white dark:border-gray-600 dark:bg-gray-700"
       }`}
     >
       <div className="mb-1.5 flex items-center justify-between gap-1">
@@ -481,10 +479,10 @@ function EditModal({
         className="card w-full max-w-md p-5 animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-bold text-navy-800">
+        <h3 className="text-lg font-bold text-navy-800 dark:text-gray-100">
           {MEAL_SHORT[editing.meal]} · {formatShortDate(editing.date)}
         </h3>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
           {editing.existing
             ? "Defina o acesso de cada esquadrão a esta refeição."
             : "Esta refeição ainda não existe — será criada."}
@@ -509,9 +507,11 @@ function EditModal({
           {ALL_SQUADRONS.map((sq) => (
             <div
               key={sq}
-              className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2 dark:border-gray-700"
             >
-              <span className="font-medium text-slate-700">{sq}º Esquadrão</span>
+              <span className="font-medium text-slate-700 dark:text-gray-200">
+                {sq}º Esquadrão
+              </span>
               <AccessSelector
                 value={editing.access[sq]}
                 onChange={(v) => setSquadron(sq, v)}
@@ -544,7 +544,7 @@ function CreatePanel({
   defaultFrom: string;
   defaultTo: string;
   existing: Slot[];
-  onCreated: (msg: string) => void;
+  onCreated: (msg: string, ok?: boolean) => void;
 }) {
   const [open, setOpen] = useState(true);
   const [from, setFrom] = useState(defaultFrom);
@@ -582,12 +582,12 @@ function CreatePanel({
 
   async function create() {
     if (from > to) {
-      onCreated("Período inválido: a data inicial é depois da final");
+      onCreated("Período inválido: a data inicial é depois da final", false);
       return;
     }
     const enabledMeals = MEAL_TYPES.filter((mt) => config[mt].enabled);
     if (enabledMeals.length === 0) {
-      onCreated("Selecione ao menos uma refeição");
+      onCreated("Selecione ao menos uma refeição", false);
       return;
     }
 
@@ -599,7 +599,7 @@ function CreatePanel({
     for (const d of dateRange(from, to)) {
       for (const mt of enabledMeals) {
         if (!hasAnyAccess(config[mt].access)) {
-          onCreated(`Defina ao menos um esquadrão para ${MEAL_SHORT[mt]}`);
+          onCreated(`Defina ao menos um esquadrão para ${MEAL_SHORT[mt]}`, false);
           return;
         }
         payload.push({ date: d, meal_type: mt, squadrons: config[mt].access });
@@ -626,10 +626,11 @@ function CreatePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slots: payload }),
       });
-      if (res.ok) onCreated(`${payload.length} refeição(ões) criada(s)/atualizada(s)`);
+      if (res.ok)
+        onCreated(`${payload.length} refeição(ões) criada(s)!`);
       else {
         const data = await res.json();
-        onCreated(data.error ?? "Erro ao criar refeições");
+        onCreated(data.error ?? "Erro ao criar refeições", false);
       }
     } finally {
       setBusy(false);
@@ -642,7 +643,7 @@ function CreatePanel({
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between px-5 py-4"
       >
-        <h2 className="font-bold text-navy-800">➕ Criar refeições</h2>
+        <h2 className="font-bold text-navy-800 dark:text-gray-100">➕ Criar refeições</h2>
         <span className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>
           ▾
         </span>
@@ -652,19 +653,19 @@ function CreatePanel({
         <div className="space-y-5 border-t border-slate-100 px-5 py-5 animate-fade-in">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-slate-500">Data início</span>
+              <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Data início</span>
               <input
                 type="date"
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-lg border border-slate-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-slate-500">Data fim</span>
+              <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Data fim</span>
               <input
                 type="date"
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-lg border border-slate-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
               />
@@ -673,7 +674,7 @@ function CreatePanel({
 
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-600">
+              <p className="text-sm font-semibold text-slate-600 dark:text-gray-300">
                 Refeições e acesso por esquadrão
               </p>
               <div className="flex gap-2">
@@ -697,11 +698,11 @@ function CreatePanel({
                 key={mt}
                 className={`rounded-xl border p-3 transition ${
                   config[mt].enabled
-                    ? "border-navy-200 bg-navy-50/40"
-                    : "border-slate-200"
+                    ? "border-navy-200 bg-navy-50/40 dark:border-navy-500/40 dark:bg-navy-500/10"
+                    : "border-slate-200 dark:border-gray-700"
                 }`}
               >
-                <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-700">
+                <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-700 dark:text-gray-200">
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-navy-600"
@@ -718,7 +719,9 @@ function CreatePanel({
                         key={sq}
                         className="flex items-center justify-between gap-3"
                       >
-                        <span className="text-sm text-slate-600">{sq}º Esq</span>
+                        <span className="text-sm text-slate-600 dark:text-gray-300">
+                          {sq}º Esq
+                        </span>
                         <AccessSelector
                           value={config[mt].access[sq]}
                           onChange={(v) => setSquadron(mt, sq, v)}

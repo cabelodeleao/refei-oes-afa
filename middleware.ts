@@ -46,6 +46,8 @@ export const config = {
     "/admin/:path*",
     "/api/slots/:path*",
     "/api/marks/:path*",
+    "/api/menu-photo/:path*",
+    "/api/admin/:path*",
     "/api/auth/change-password",
     "/api/auth/logout",
   ],

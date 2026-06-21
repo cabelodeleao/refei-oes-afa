@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,10 +36,12 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-gradient-to-br from-navy-900 via-navy-800 to-navy-600 px-4 py-10">
+    <main className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-gradient-to-br from-navy-900 via-navy-800 to-navy-600 px-4 py-10 dark:from-black dark:via-gray-950 dark:to-navy-900">
       {/* Brilhos decorativos suaves ao fundo */}
-      <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-navy-500/30 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-blue-400/20 blur-3xl" />
+      <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-navy-500/30 blur-3xl dark:bg-navy-700/30" />
+      <div className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-blue-400/20 blur-3xl dark:bg-navy-600/20" />
+
+      <ThemeToggle className="absolute right-4 top-4" />
 
       <div className="relative w-full max-w-sm animate-fade-in-up">
         <div className="mb-7 text-center">

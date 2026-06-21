@@ -8,10 +8,11 @@ cadete marca "Sim" ou "Não".
 
 - **Next.js 14** (App Router) + TypeScript
 - **Supabase** (PostgreSQL) — acesso server-side via `service_role` key
-- **Tailwind CSS** — UI mobile-first
+- **Tailwind CSS** — UI mobile-first, com **modo claro/escuro** (`darkMode: 'class'`)
 - **bcryptjs** — hash de senhas
 - **jose** — JWT em cookie `httpOnly`
 - **exceljs** — exportação do resumo em Excel (.xlsx)
+- **PWA** — `manifest.json` + service worker (instalável no celular)
 
 > Autenticação **própria** (não usa Supabase Auth). Login por número do cadete.
 
@@ -100,13 +101,15 @@ Acesse [http://localhost:3000](http://localhost:3000).
 ├── supabase-setup.sql        # schema + índices + RLS
 ├── scripts/seed.js           # npm run seed
 ├── middleware.ts             # proteção de rotas + controle de papel
+├── public/                   # manifest.json, sw.js, icon-192/512.svg (PWA)
 └── src/
     ├── app/
     │   ├── page.tsx          # / (login)
     │   ├── cadete/           # painel do cadete
-    │   ├── admin/            # painel do admin (Gerenciar / Resumo / Cardápio)
-    │   └── api/              # auth, slots, marks, summary, menu-photo
-    ├── components/           # Toggle, ChangePassword, LogoutButton, MenuBanner
+    │   ├── admin/            # painel do admin (Gerenciar / Resumo / Cardápio / Cadetes)
+    │   └── api/              # auth, slots, marks, summary, menu-photo, admin
+    ├── components/           # Toggle, ChangePassword, LogoutButton, MenuBanner,
+    │                         #   Toast, ThemeToggle, ServiceWorkerRegister
     └── lib/                  # auth (JWT), supabase, dates, constants
 ```
 
@@ -134,6 +137,16 @@ Acesse [http://localhost:3000](http://localhost:3000).
   - **Cardápio:** envia a foto do cardápio da semana (JPG/PNG/WEBP, até 5 MB) com
     título, preview antes de publicar e histórico com **ativar/desativar/remover**.
     Apenas um cardápio fica ativo por vez.
+  - **Cadetes:** busca por número ou nome e **reseta a senha** de um cadete para a
+    senha inicial (`123456`), com modal de confirmação.
+
+> **Modo escuro:** o botão ☀️/🌙 no cabeçalho (e no login) alterna claro/escuro; a
+> preferência fica salva em `localStorage` (`theme`) e, no primeiro acesso, segue o
+> `prefers-color-scheme` do sistema.
+
+> **Instalar como app (PWA):** no celular, use "Adicionar à tela inicial". O app abre
+> em tela cheia (`standalone`); um service worker faz cache dos assets estáticos para
+> abrir mais rápido (dados de API são sempre buscados da rede).
 
 ---
 
@@ -157,6 +170,8 @@ Acesse [http://localhost:3000](http://localhost:3000).
 | POST | `/api/menu-photo` | (admin) upload da foto (FormData `image` + `title`) e ativa |
 | PATCH | `/api/menu-photo/[id]` | (admin) ativa/desativa um cardápio (`{ active }`) |
 | DELETE | `/api/menu-photo/[id]` | (admin) remove o cardápio e o arquivo do storage |
+| GET | `/api/admin/cadets` | (admin) busca cadetes por número/nome (`?q=`, máx. 50) |
+| POST | `/api/admin/reset-password` | (admin) reseta a senha de um cadete para `123456` |
 
 ---
 

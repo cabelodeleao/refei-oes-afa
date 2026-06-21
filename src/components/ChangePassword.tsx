@@ -2,26 +2,24 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/client";
+import { useToast } from "@/components/Toast";
 
 export default function ChangePassword() {
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
-    null
-  );
   const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null);
     if (next.length < 6) {
-      setMsg({ type: "err", text: "A nova senha deve ter no mínimo 6 caracteres." });
+      toast.error("A nova senha deve ter no mínimo 6 caracteres.");
       return;
     }
     if (next !== confirm) {
-      setMsg({ type: "err", text: "A confirmação não corresponde à nova senha." });
+      toast.error("A confirmação não corresponde à nova senha.");
       return;
     }
     setLoading(true);
@@ -33,15 +31,16 @@ export default function ChangePassword() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setMsg({ type: "err", text: data.error ?? "Erro ao trocar a senha." });
+        toast.error(data.error ?? "Erro ao trocar a senha.");
       } else {
-        setMsg({ type: "ok", text: "Senha alterada com sucesso!" });
+        toast.success("Senha alterada com sucesso!");
         setCurrent("");
         setNext("");
         setConfirm("");
+        setOpen(false);
       }
     } catch {
-      setMsg({ type: "err", text: "Erro de conexão." });
+      toast.error("Erro de conexão.");
     } finally {
       setLoading(false);
     }
@@ -54,11 +53,11 @@ export default function ChangePassword() {
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between px-5 py-4 text-left"
       >
-        <span className="flex items-center gap-2 font-semibold text-slate-700">
+        <span className="flex items-center gap-2 font-semibold text-slate-700 dark:text-gray-200">
           <span>🔒</span> Trocar senha
         </span>
         <span
-          className={`text-slate-400 transition-transform ${
+          className={`text-slate-400 transition-transform dark:text-gray-500 ${
             open ? "rotate-180" : ""
           }`}
         >
@@ -67,7 +66,7 @@ export default function ChangePassword() {
       </button>
 
       {open && (
-        <form onSubmit={submit} className="space-y-3 border-t border-slate-100 px-5 py-4 animate-fade-in">
+        <form onSubmit={submit} className="space-y-3 border-t border-slate-100 px-5 py-4 animate-fade-in dark:border-gray-700">
           <input
             className="input"
             type="password"
@@ -95,17 +94,6 @@ export default function ChangePassword() {
             onChange={(e) => setConfirm(e.target.value)}
             required
           />
-          {msg && (
-            <p
-              className={`rounded-lg px-3 py-2 text-sm ${
-                msg.type === "ok"
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-red-50 text-red-700"
-              }`}
-            >
-              {msg.text}
-            </p>
-          )}
           <button type="submit" className="btn-primary w-full" disabled={loading}>
             {loading ? "Salvando..." : "Salvar nova senha"}
           </button>

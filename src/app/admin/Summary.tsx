@@ -89,19 +89,19 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-slate-500">De</span>
+              <span className="text-xs font-medium text-slate-500 dark:text-gray-400">De</span>
               <input
                 type="date"
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-lg border border-slate-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-slate-500">Até</span>
+              <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Até</span>
               <input
                 type="date"
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-lg border border-slate-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
               />
@@ -118,12 +118,14 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
       </section>
 
       <section className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <h2 className="font-bold text-navy-800">Resumo de marcações</h2>
-          <p className="text-xs text-slate-500">
+        <div className="border-b border-slate-100 px-5 py-4 dark:border-gray-700">
+          <h2 className="font-bold text-navy-800 dark:text-gray-100">
+            Resumo de marcações
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-gray-400">
             Clique em um número para ver os cadetes que marcaram “Sim”.
           </p>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-gray-400">
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-3 w-3 rounded ring-1 ring-slate-300" />
               Opcional — marcaram voluntariamente
@@ -152,17 +154,17 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
                 <th className="px-3 py-3 text-center font-semibold">Total</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
               {slots.map((s) => (
                 <tr
                   key={s.id}
-                  className="odd:bg-white even:bg-slate-50/50 transition-colors hover:bg-navy-50"
+                  className="odd:bg-white even:bg-slate-50/50 transition-colors hover:bg-navy-50 dark:odd:bg-gray-800 dark:even:bg-gray-800/50 dark:hover:bg-gray-700/60"
                 >
                   <td className="px-4 py-3">
-                    <div className="font-semibold text-navy-800">
+                    <div className="font-semibold text-navy-800 dark:text-gray-100">
                       {formatShortDate(s.date)} · {MEAL_SHORT[s.meal_type]}
                     </div>
-                    <div className="text-xs capitalize text-slate-400">
+                    <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
                       {weekdayShort(s.date)}
                       {s.locked && " · 🔒"}
                     </div>
@@ -194,7 +196,7 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
                       return (
                         <td key={sq} className="px-3 py-3 text-center">
                           <span
-                            className="inline-block rounded-lg bg-slate-100 px-2 py-1 text-slate-400 ring-1 ring-inset ring-slate-200"
+                            className="inline-block rounded-lg bg-slate-100 px-2 py-1 text-slate-400 ring-1 ring-inset ring-slate-200 dark:bg-gray-700 dark:text-gray-500 dark:ring-gray-600"
                             title="Esquadrão sem essa refeição"
                           >
                             -
@@ -209,25 +211,25 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
                       <td key={sq} className="px-3 py-3 text-center">
                         {count > 0 ? (
                           <button
-                            className="rounded-lg px-2 py-1 font-semibold text-navy-700 hover:bg-navy-50"
+                            className="rounded-lg px-2 py-1 font-semibold text-navy-700 hover:bg-navy-50 dark:text-navy-50 dark:hover:bg-gray-700"
                             onClick={() => setDetail({ slot: s, squadron: sq })}
                           >
                             {count}
                           </button>
                         ) : (
-                          <span className="text-slate-400">0</span>
+                          <span className="text-slate-400 dark:text-gray-500">0</span>
                         )}
                       </td>
                     );
                   })}
-                  <td className="px-3 py-3 text-center font-bold text-navy-800">
+                  <td className="px-3 py-3 text-center font-bold text-navy-800 dark:text-gray-100">
                     {s.total}
                   </td>
                 </tr>
               ))}
               {!loading && slots.length === 0 && (
                 <tr>
-                  <td colSpan={ALL_SQUADRONS.length + 2} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={ALL_SQUADRONS.length + 2} className="px-4 py-8 text-center text-slate-400 dark:text-gray-500">
                     Nenhuma refeição no período selecionado
                   </td>
                 </tr>
@@ -237,7 +239,9 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
         </div>
 
         {loading && (
-          <div className="px-5 py-4 text-center text-sm text-slate-400">Carregando…</div>
+          <div className="px-5 py-4 text-center text-sm text-slate-400 dark:text-gray-500">
+            Carregando…
+          </div>
         )}
       </section>
 
@@ -297,10 +301,10 @@ function CadetListModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3">
-          <h3 className="text-lg font-bold text-navy-800">
+          <h3 className="text-lg font-bold text-navy-800 dark:text-gray-100">
             {MEAL_SHORT[slot.meal_type]} · {formatShortDate(slot.date)}
           </h3>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-gray-400">
             {SQUADRON_LABELS[squadron]} — {expected} marcaram “Sim”
           </p>
         </div>
@@ -314,13 +318,15 @@ function CadetListModal({
               Nenhum cadete marcou “Sim”.
             </p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-slate-100 dark:divide-gray-700">
               {cadets.map((c) => (
                 <li key={c.number} className="flex items-center gap-3 py-2.5">
-                  <span className="font-mono text-sm text-slate-500">
+                  <span className="font-mono text-sm text-slate-500 dark:text-gray-400">
                     {c.number}
                   </span>
-                  <span className="font-medium text-slate-700">{c.name}</span>
+                  <span className="font-medium text-slate-700 dark:text-gray-200">
+                    {c.name}
+                  </span>
                 </li>
               ))}
             </ul>

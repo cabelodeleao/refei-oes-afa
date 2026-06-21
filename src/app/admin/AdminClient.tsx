@@ -3,19 +3,21 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
+import ThemeToggle from "@/components/ThemeToggle";
 import ManageMeals from "./ManageMeals";
 import Summary from "./Summary";
 import MenuManager from "./MenuManager";
+import Cadets from "./Cadets";
 import { toISODate, startOfWeek, addDays } from "@/lib/dates";
 
 interface Props {
   user: { name: string; number: string };
 }
 
-type Tab = "gerenciar" | "resumo" | "cardapio";
+type Tab = "gerenciar" | "resumo" | "cardapio" | "cadetes";
 
 function parseTab(v: string | null): Tab {
-  if (v === "resumo" || v === "cardapio") return v;
+  if (v === "resumo" || v === "cardapio" || v === "cadetes") return v;
   return "gerenciar";
 }
 
@@ -54,7 +56,10 @@ export default function AdminClient({ user }: Props) {
               </p>
               <p className="text-xs text-blue-100/80">{user.name}</p>
             </div>
-            <LogoutButton />
+            <div className="flex shrink-0 items-center gap-2">
+              <ThemeToggle />
+              <LogoutButton />
+            </div>
           </div>
           <nav className="flex gap-1">
             <TabButton
@@ -72,6 +77,12 @@ export default function AdminClient({ user }: Props) {
             >
               Cardápio
             </TabButton>
+            <TabButton
+              active={tab === "cadetes"}
+              onClick={() => setTab("cadetes")}
+            >
+              Cadetes
+            </TabButton>
           </nav>
         </div>
       </header>
@@ -81,8 +92,10 @@ export default function AdminClient({ user }: Props) {
           <ManageMeals from={from} to={to} setFrom={setFrom} setTo={setTo} />
         ) : tab === "resumo" ? (
           <Summary from={from} to={to} setFrom={setFrom} setTo={setTo} />
-        ) : (
+        ) : tab === "cardapio" ? (
           <MenuManager />
+        ) : (
+          <Cadets />
         )}
       </main>
     </div>
@@ -103,7 +116,7 @@ function TabButton({
       onClick={onClick}
       className={`relative rounded-t-lg px-4 py-2.5 text-sm font-semibold transition ${
         active
-          ? "bg-slate-100 text-navy-800"
+          ? "bg-slate-100 text-navy-800 dark:bg-gray-900 dark:text-gray-100"
           : "text-blue-100/80 hover:bg-white/10"
       }`}
     >

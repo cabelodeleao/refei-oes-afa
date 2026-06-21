@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: "class",
   content: [
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -26,6 +27,10 @@ module.exports = {
           700: "#1a2f57",
           600: "#1e3a6e",
           500: "#2b4d8a",
+          400: "#3f64a6",
+          300: "#6a8bc2",
+          200: "#aac0de",
+          100: "#d6e2f0",
           50: "#eef3fb",
         },
       },
@@ -51,12 +56,22 @@ module.exports = {
           "0%": { opacity: "0", transform: "scale(0.96)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        "toast-in": {
+          "0%": { opacity: "0", transform: "translateY(-16px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "toast-out": {
+          "0%": { opacity: "1", transform: "translateY(0)" },
+          "100%": { opacity: "0", transform: "translateY(-16px)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.25s ease-out",
         "fade-in-up": "fade-in-up 0.35s ease-out both",
         "slide-down": "slide-down 0.3s ease-out",
         "scale-in": "scale-in 0.2s ease-out",
+        "toast-in": "toast-in 0.28s ease-out",
+        "toast-out": "toast-out 0.28s ease-in forwards",
       },
     },
   },
