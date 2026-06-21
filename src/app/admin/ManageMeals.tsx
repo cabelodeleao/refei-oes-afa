@@ -553,8 +553,8 @@ function CreatePanel({
     Record<MealType, { enabled: boolean; access: AccessMap }>
   >({
     cafe: { enabled: false, access: uniformAccess("opcional") },
-    almoco: { enabled: true, access: uniformAccess("opcional") },
-    janta: { enabled: true, access: uniformAccess("opcional") },
+    almoco: { enabled: false, access: uniformAccess("opcional") },
+    janta: { enabled: false, access: uniformAccess("opcional") },
     ceia: { enabled: false, access: uniformAccess("opcional") },
   });
   const [busy, setBusy] = useState(false);

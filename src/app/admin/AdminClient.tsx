@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -21,6 +21,9 @@ function parseTab(v: string | null): Tab {
   return "gerenciar";
 }
 
+const FROM_KEY = "admin-date-from";
+const TO_KEY = "admin-date-to";
+
 export default function AdminClient({ user }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -31,10 +34,28 @@ export default function AdminClient({ user }: Props) {
   const defaultFrom = toISODate(week);
   const defaultTo = toISODate(addDays(week, 6));
 
-  // Valores iniciais lidos da URL (?tab=&from=&to=), com fallback.
+  // Valores iniciais lidos da URL (?tab=&from=&to=), com fallback à semana atual.
+  // Inicialização SSR-safe (sem localStorage): o intervalo salvo é restaurado
+  // logo após a montagem, evitando divergência de hidratação.
   const [tab, setTab] = useState<Tab>(parseTab(searchParams.get("tab")));
   const [from, setFrom] = useState(searchParams.get("from") || defaultFrom);
   const [to, setTo] = useState(searchParams.get("to") || defaultTo);
+
+  // Restaura o último intervalo de datas salvo (persiste entre sessões).
+  // A URL tem prioridade; sem ela, usa o localStorage; sem nada, a semana atual.
+  useEffect(() => {
+    if (searchParams.get("from") || searchParams.get("to")) return;
+    try {
+      const savedFrom = localStorage.getItem(FROM_KEY);
+      const savedTo = localStorage.getItem(TO_KEY);
+      if (savedFrom) setFrom(savedFrom);
+      if (savedTo) setTo(savedTo);
+    } catch {
+      /* localStorage indisponível: mantém o padrão */
+    }
+    // Executa apenas na montagem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Mantém a URL sincronizada sem recarregar a página (navegação shallow).
   useEffect(() => {
@@ -44,6 +65,22 @@ export default function AdminClient({ user }: Props) {
     params.set("to", to);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [tab, from, to, pathname, router]);
+
+  // Persiste as datas no localStorage sempre que mudam — exceto na primeira
+  // renderização, para não sobrescrever o valor salvo antes da restauração.
+  const persistReady = useRef(false);
+  useEffect(() => {
+    if (!persistReady.current) {
+      persistReady.current = true;
+      return;
+    }
+    try {
+      localStorage.setItem(FROM_KEY, from);
+      localStorage.setItem(TO_KEY, to);
+    } catch {
+      /* localStorage indisponível: ignora */
+    }
+  }, [from, to]);
 
   return (
     <div className="min-h-[100dvh]">
