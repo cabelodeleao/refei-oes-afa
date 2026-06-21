@@ -39,6 +39,13 @@ export async function POST(req: Request) {
   if (!cadet) {
     return NextResponse.json({ error: "Cadete não encontrado" }, { status: 404 });
   }
+  // Não reseta contas de administrador para a senha padrão pública.
+  if (cadet.is_admin) {
+    return NextResponse.json(
+      { error: "Não é possível resetar a senha de uma conta de administrador." },
+      { status: 400 }
+    );
+  }
 
   const newHash = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
   const { error: updErr } = await supabaseAdmin

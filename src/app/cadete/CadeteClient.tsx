@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Toggle from "@/components/Toggle";
 import ChangePassword from "@/components/ChangePassword";
 import LogoutButton from "@/components/LogoutButton";
@@ -38,6 +38,18 @@ export default function CadeteClient({ user }: Props) {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+
+  // Toast de "salvo" com debounce: ao marcar várias refeições em sequência,
+  // mostra um único toast ~700ms após a última gravação bem-sucedida.
+  const savedTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
+  function notifySaved() {
+    clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(
+      () => toast.success("Refeições salvas com sucesso! ✓"),
+      700
+    );
+  }
 
   useEffect(() => {
     (async () => {
@@ -94,14 +106,16 @@ export default function CadeteClient({ user }: Props) {
         setSlots((prev) =>
           prev.map((s) => (s.id === slot.id ? { ...s, marked: !next } : s))
         );
+        clearTimeout(savedTimer.current);
         toast.error("Não foi possível salvar. Tente novamente.");
       } else {
-        toast.success("Refeições salvas com sucesso! ✓");
+        notifySaved();
       }
     } catch {
       setSlots((prev) =>
         prev.map((s) => (s.id === slot.id ? { ...s, marked: !next } : s))
       );
+      clearTimeout(savedTimer.current);
       toast.error("Erro de conexão.");
     } finally {
       setPending((p) => {

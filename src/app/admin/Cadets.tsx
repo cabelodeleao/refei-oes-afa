@@ -21,14 +21,20 @@ export default function Cadets() {
   const [resetting, setResetting] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout>>();
 
-  // Busca com debounce (300ms).
+  // Busca com debounce (300ms). Sem texto, não busca: mostra o estado inicial.
   useEffect(() => {
+    const term = q.trim();
     clearTimeout(debounce.current);
+    if (!term) {
+      setCadets([]);
+      setLoading(false);
+      return;
+    }
     debounce.current = setTimeout(async () => {
       setLoading(true);
       try {
         const res = await apiFetch(
-          `/api/admin/cadets?q=${encodeURIComponent(q.trim())}`
+          `/api/admin/cadets?q=${encodeURIComponent(term)}`
         );
         const data = await res.json();
         if (res.ok) setCadets(data.cadets ?? []);
