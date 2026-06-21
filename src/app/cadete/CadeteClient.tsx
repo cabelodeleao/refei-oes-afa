@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Toggle from "@/components/Toggle";
 import ChangePassword from "@/components/ChangePassword";
 import LogoutButton from "@/components/LogoutButton";
+import { apiFetch } from "@/lib/client";
 import {
   MEAL_TYPES,
   MEAL_LABELS,
@@ -35,7 +36,7 @@ export default function CadeteClient({ user }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/slots");
+        const res = await apiFetch("/api/slots");
         const data = await res.json();
         if (res.ok) setSlots(data.slots ?? []);
         else setError(data.error ?? "Erro ao carregar refeições");
@@ -67,7 +68,7 @@ export default function CadeteClient({ user }: Props) {
     );
     setPending((p) => new Set(p).add(slot.id));
     try {
-      const res = await fetch("/api/marks", {
+      const res = await apiFetch("/api/marks", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slot_id: slot.id, marked: next }),

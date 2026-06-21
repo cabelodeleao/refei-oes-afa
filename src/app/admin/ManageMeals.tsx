@@ -20,6 +20,7 @@ import {
   weekdayShort,
   parseISODate,
 } from "@/lib/dates";
+import { apiFetch } from "@/lib/client";
 
 interface Slot {
   id: string;
@@ -72,7 +73,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/slots?from=${from}&to=${to}`);
+      const res = await apiFetch(`/api/slots?from=${from}&to=${to}`);
       const data = await res.json();
       if (res.ok) setSlots(data.slots ?? []);
     } finally {
@@ -113,7 +114,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
 
   async function bulkLock(locked: boolean) {
     if (selected.size === 0) return;
-    const res = await fetch("/api/slots/lock", {
+    const res = await apiFetch("/api/slots/lock", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slot_ids: [...selected], locked }),
@@ -129,7 +130,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     if (selected.size === 0) return;
     if (!confirm(`Remover ${selected.size} refeição(ões)? As marcações serão apagadas.`))
       return;
-    const res = await fetch("/api/slots", {
+    const res = await apiFetch("/api/slots", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slot_ids: [...selected] }),
@@ -147,7 +148,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
       showToast("Defina ao menos um esquadrão como Opcional ou Todos");
       return;
     }
-    const res = await fetch("/api/slots", {
+    const res = await apiFetch("/api/slots", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -620,7 +621,7 @@ function CreatePanel({
 
     setBusy(true);
     try {
-      const res = await fetch("/api/slots", {
+      const res = await apiFetch("/api/slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slots: payload }),

@@ -10,6 +10,7 @@ import {
   type AccessState,
 } from "@/lib/constants";
 import { formatShortDate, weekdayShort } from "@/lib/dates";
+import { apiFetch } from "@/lib/client";
 
 interface CadetLite {
   number: string;
@@ -50,7 +51,7 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/marks/summary?from=${from}&to=${to}`);
+      const res = await apiFetch(`/api/marks/summary?from=${from}&to=${to}`);
       const data = await res.json();
       if (res.ok) {
         setSlots(data.slots ?? []);
@@ -69,9 +70,10 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
   async function exportXlsx() {
     setExporting(true);
     try {
-      const res = await fetch(`/api/marks/export?from=${from}&to=${to}`);
+      const res = await apiFetch(`/api/marks/export?from=${from}&to=${to}`);
       if (!res.ok) {
-        alert("Não foi possível gerar o arquivo.");
+        const data = await res.json().catch(() => null);
+        alert(data?.error ?? "Não foi possível gerar o arquivo.");
         return;
       }
       const blob = await res.blob();

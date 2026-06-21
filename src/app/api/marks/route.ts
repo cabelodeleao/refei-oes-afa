@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { getAccess } from "@/lib/constants";
 
@@ -17,29 +17,22 @@ export async function GET(req: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  // Filtra por período via join nos slots quando from/to informados.
-  let slotIds: string[] | null = null;
-  if (from || to) {
-    let sq = supabaseAdmin.from("meal_slots").select("id");
-    if (from) sq = sq.gte("date", from);
-    if (to) sq = sq.lte("date", to);
-    const { data: slots } = await sq;
-    slotIds = (slots ?? []).map((s) => s.id as string);
-    if (slotIds.length === 0) return NextResponse.json({ slot_ids: [] });
-  }
-
-  let query = supabaseAdmin
-    .from("meal_marks")
-    .select("slot_id")
-    .eq("cadet_id", session.sub);
-  if (slotIds) query = query.in("slot_id", slotIds);
-
-  const { data, error } = await query;
-  if (error) {
+  // Paginado e filtrado por período via join em meal_slots.
+  try {
+    const marks = await selectAll<{ slot_id: string }>(
+      "meal_marks",
+      from || to ? "id, slot_id, meal_slots!inner(date)" : "id, slot_id",
+      (q) => {
+        q = q.eq("cadet_id", session.sub);
+        if (from) q = q.gte("meal_slots.date", from);
+        if (to) q = q.lte("meal_slots.date", to);
+        return q;
+      }
+    );
+    return NextResponse.json({ slot_ids: marks.map((m) => m.slot_id) });
+  } catch {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
-
-  return NextResponse.json({ slot_ids: (data ?? []).map((m) => m.slot_id) });
 }
 
 // PUT /api/marks  — marca/desmarca uma refeição (cadete)

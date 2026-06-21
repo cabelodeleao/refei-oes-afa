@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
-import { getAccess, type MealType, type SquadronAccess } from "@/lib/constants";
+import {
+  getAccess,
+  MEAL_TYPES,
+  type MealType,
+  type SquadronAccess,
+} from "@/lib/constants";
 
 export const runtime = "nodejs";
 
@@ -9,6 +14,13 @@ interface CadetLite {
   number: string;
   name: string;
   squadron: number;
+}
+interface SlotRow {
+  id: string;
+  date: string;
+  meal_type: MealType;
+  squadrons: SquadronAccess;
+  locked: boolean;
 }
 
 // GET /api/marks/summary?from=YYYY-MM-DD&to=YYYY-MM-DD  (admin)
@@ -22,60 +34,65 @@ export async function GET(req: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  let slotQuery = supabaseAdmin
-    .from("meal_slots")
-    .select("id, date, meal_type, squadrons, locked")
-    .order("date", { ascending: true });
-  if (from) slotQuery = slotQuery.gte("date", from);
-  if (to) slotQuery = slotQuery.lte("date", to);
+  let slotList: SlotRow[];
+  let squadronTotals: Record<number, number>;
+  try {
+    // Paginado: o intervalo pode ter > 1000 slots.
+    slotList = await selectAll<SlotRow>(
+      "meal_slots",
+      "id, date, meal_type, squadrons, locked",
+      (q) => {
+        if (from) q = q.gte("date", from);
+        if (to) q = q.lte("date", to);
+        return q;
+      }
+    );
+    slotList.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return MEAL_TYPES.indexOf(a.meal_type) - MEAL_TYPES.indexOf(b.meal_type);
+    });
 
-  const { data: slots, error: slotErr } = await slotQuery;
-  if (slotErr) {
-    return NextResponse.json({ error: "Erro ao buscar refeições" }, { status: 500 });
-  }
-
-  const slotList = (slots ?? []) as Array<{
-    id: string;
-    date: string;
-    meal_type: MealType;
-    squadrons: SquadronAccess;
-    locked: boolean;
-  }>;
-
-  // Total de cadetes por esquadrão (exclui admin, squadron 0).
-  // Usado para os esquadrões sem acesso (refeição obrigatória = todos comem).
-  const squadronTotals: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
-  const { data: cadetRows } = await supabaseAdmin
-    .from("cadets")
-    .select("squadron")
-    .gt("squadron", 0);
-  for (const c of cadetRows ?? []) {
-    const sq = (c as { squadron: number }).squadron;
-    if (squadronTotals[sq] !== undefined) squadronTotals[sq] += 1;
+    // Total de cadetes por esquadrão (exclui admin, squadron 0). Paginado.
+    squadronTotals = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const cadetRows = await selectAll<{ squadron: number }>(
+      "cadets",
+      "id, squadron",
+      (q) => q.gt("squadron", 0)
+    );
+    for (const c of cadetRows) {
+      if (squadronTotals[c.squadron] !== undefined) squadronTotals[c.squadron] += 1;
+    }
+  } catch {
+    return NextResponse.json({ error: "Erro ao buscar dados" }, { status: 500 });
   }
 
   if (slotList.length === 0) {
     return NextResponse.json({ slots: [], squadronTotals });
   }
 
-  const slotIds = slotList.map((s) => s.id);
-
-  // Marcações + dados do cadete.
-  const { data: marks, error: marksErr } = await supabaseAdmin
-    .from("meal_marks")
-    .select("slot_id, cadets!inner(number, name, squadron)")
-    .in("slot_id", slotIds);
-
-  if (marksErr) {
+  // Marcações + dados do cadete. Paginado (podem ser milhares de linhas) e
+  // filtrado pelo período via join em meal_slots — evita um IN(...) gigante.
+  let marks: Array<{ slot_id: string; cadets: CadetLite }>;
+  try {
+    marks = await selectAll<{ slot_id: string; cadets: CadetLite }>(
+      "meal_marks",
+      "id, slot_id, cadets!inner(number, name, squadron), meal_slots!inner(date)",
+      (q) => {
+        if (from) q = q.gte("meal_slots.date", from);
+        if (to) q = q.lte("meal_slots.date", to);
+        return q;
+      }
+    );
+  } catch {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
 
   // Agrupa cadetes marcados por slot e por esquadrão.
   const bySlot = new Map<string, Map<number, CadetLite[]>>();
-  for (const m of marks ?? []) {
-    const cadet = (m as unknown as { cadets: CadetLite }).cadets;
+  for (const m of marks) {
+    const cadet = m.cadets;
     if (!cadet) continue;
-    const slotId = (m as { slot_id: string }).slot_id;
+    const slotId = m.slot_id;
     if (!bySlot.has(slotId)) bySlot.set(slotId, new Map());
     const sqMap = bySlot.get(slotId)!;
     if (!sqMap.has(cadet.squadron)) sqMap.set(cadet.squadron, []);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { supabaseAdmin } from "@/lib/supabase";
+import { selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import {
   MEAL_TYPES,
@@ -46,38 +46,52 @@ export async function GET(req: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  // --- Slots no período, ordenados por data e tipo de refeição ---
-  let slotQuery = supabaseAdmin
-    .from("meal_slots")
-    .select("id, date, meal_type, squadrons, locked");
-  if (from) slotQuery = slotQuery.gte("date", from);
-  if (to) slotQuery = slotQuery.lte("date", to);
-  const { data: slotsData, error: slotErr } = await slotQuery;
-  if (slotErr) {
-    return NextResponse.json({ error: "Erro ao buscar refeições" }, { status: 500 });
-  }
-
-  const slots = ((slotsData ?? []) as SlotRow[]).sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    return MEAL_TYPES.indexOf(a.meal_type) - MEAL_TYPES.indexOf(b.meal_type);
-  });
-
-  if (slots.length === 0) {
-    return NextResponse.json(
-      { error: "Nenhuma refeição no período selecionado" },
-      { status: 400 }
+  let slots: SlotRow[];
+  let cadets: CadetRow[];
+  try {
+    // --- Slots no período (paginado), ordenados por data e tipo de refeição ---
+    slots = await selectAll<SlotRow>(
+      "meal_slots",
+      "id, date, meal_type, squadrons, locked",
+      (q) => {
+        if (from) q = q.gte("date", from);
+        if (to) q = q.lte("date", to);
+        return q;
+      }
     );
+    slots.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return MEAL_TYPES.indexOf(a.meal_type) - MEAL_TYPES.indexOf(b.meal_type);
+    });
+
+    if (slots.length === 0) {
+      return NextResponse.json(
+        { error: "Nenhuma refeição no período selecionado" },
+        { status: 400 }
+      );
+    }
+
+    // O exceljs monta o arquivo inteiro em memória. Cada refeição vira uma
+    // coluna em cada aba de esquadrão; limitamos o período para não estourar
+    // memória/tempo da função (≈ 6 meses de 4 refeições/dia).
+    if (slots.length > 750) {
+      return NextResponse.json(
+        {
+          error:
+            "Período muito grande para exportar de uma vez. Selecione um intervalo menor (até ~6 meses).",
+        },
+        { status: 400 }
+      );
+    }
+
+    // --- Cadetes (exclui admin), paginado ---
+    cadets = await selectAll<CadetRow>("cadets", "id, number, name, squadron", (q) =>
+      q.gt("squadron", 0)
+    );
+  } catch {
+    return NextResponse.json({ error: "Erro ao buscar dados" }, { status: 500 });
   }
 
-  // --- Cadetes (exclui admin), agrupados por esquadrão e ordenados por número ---
-  const { data: cadetsData, error: cadetErr } = await supabaseAdmin
-    .from("cadets")
-    .select("id, number, name, squadron")
-    .gt("squadron", 0);
-  if (cadetErr) {
-    return NextResponse.json({ error: "Erro ao buscar cadetes" }, { status: 500 });
-  }
-  const cadets = (cadetsData ?? []) as CadetRow[];
   const cadetSquadron = new Map<string, number>();
   for (const c of cadets) cadetSquadron.set(c.id, c.squadron);
 
@@ -88,20 +102,27 @@ export async function GET(req: Request) {
     bySquadron.get(sq)!.sort((a, b) => a.number.localeCompare(b.number));
   }
 
-  // --- Marcações: Set "cadetId|slotId" e contagem voluntária por slot/esquadrão ---
-  const slotIds = slots.map((s) => s.id);
-  const { data: marksData, error: marksErr } = await supabaseAdmin
-    .from("meal_marks")
-    .select("cadet_id, slot_id")
-    .in("slot_id", slotIds);
-  if (marksErr) {
+  // --- Marcações: Set "cadetId|slotId" e contagem voluntária por slot/esquadrão.
+  // Paginado e filtrado pelo período via join em meal_slots (evita IN gigante).
+  let marksData: Array<{ cadet_id: string; slot_id: string }>;
+  try {
+    marksData = await selectAll<{ cadet_id: string; slot_id: string }>(
+      "meal_marks",
+      "id, cadet_id, slot_id, meal_slots!inner(date)",
+      (q) => {
+        if (from) q = q.gte("meal_slots.date", from);
+        if (to) q = q.lte("meal_slots.date", to);
+        return q;
+      }
+    );
+  } catch {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
   const markedSet = new Set<string>();
   const simCount = new Map<string, number>(); // "slotId|squadron" -> nº de "Sim"
-  for (const m of marksData ?? []) {
-    const cadetId = (m as { cadet_id: string }).cadet_id;
-    const slotId = (m as { slot_id: string }).slot_id;
+  for (const m of marksData) {
+    const cadetId = m.cadet_id;
+    const slotId = m.slot_id;
     markedSet.add(`${cadetId}|${slotId}`);
     const sq = cadetSquadron.get(cadetId);
     if (sq) {

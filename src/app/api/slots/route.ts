@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import {
   MEAL_TYPES,
@@ -31,20 +31,23 @@ export async function GET(req: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  let query = supabaseAdmin
-    .from("meal_slots")
-    .select("id, date, meal_type, squadrons, locked")
-    .order("date", { ascending: true });
-
-  if (from) query = query.gte("date", from);
-  if (to) query = query.lte("date", to);
-
-  const { data, error } = await query;
-  if (error) {
+  // Paginado: o cadete carrega todos os slots (sem from/to) e o total cresce
+  // com o tempo, podendo passar de 1000.
+  let slots: SlotRow[];
+  try {
+    slots = await selectAll<SlotRow>(
+      "meal_slots",
+      "id, date, meal_type, squadrons, locked",
+      (q) => {
+        if (from) q = q.gte("date", from);
+        if (to) q = q.lte("date", to);
+        return q;
+      }
+    );
+  } catch {
     return NextResponse.json({ error: "Erro ao buscar refeições" }, { status: 500 });
   }
-
-  const slots = (data ?? []) as SlotRow[];
+  slots.sort((a, b) => a.date.localeCompare(b.date));
 
   // Admin vê todos os slots, sem filtro de esquadrão.
   if (session.is_admin) {
@@ -57,15 +60,17 @@ export async function GET(req: Request) {
     .map((s) => ({ ...s, access: getAccess(s.squadrons, session.squadron) }))
     .filter((s) => s.access !== "ninguem");
 
-  const slotIds = visible.map((s) => s.id);
+  // Todas as marcações do cadete (paginado). Só consultamos as visíveis depois.
   let markedSet = new Set<string>();
-  if (slotIds.length > 0) {
-    const { data: marks } = await supabaseAdmin
-      .from("meal_marks")
-      .select("slot_id")
-      .eq("cadet_id", session.sub)
-      .in("slot_id", slotIds);
-    markedSet = new Set((marks ?? []).map((m) => m.slot_id as string));
+  try {
+    const marks = await selectAll<{ slot_id: string }>(
+      "meal_marks",
+      "id, slot_id",
+      (q) => q.eq("cadet_id", session.sub)
+    );
+    markedSet = new Set(marks.map((m) => m.slot_id));
+  } catch {
+    return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
 
   return NextResponse.json({
