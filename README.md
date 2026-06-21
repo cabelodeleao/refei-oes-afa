@@ -38,6 +38,14 @@ No painel do Supabase → **SQL Editor**, cole e execute o conteúdo de
 >   — converte `meal_slots.squadrons` de `INTEGER[]` para JSONB.
 > - [`supabase-migration-attending.sql`](./supabase-migration-attending.sql)
 >   — adiciona `meal_marks.attending` (suporte ao opt-out do 3º/4º esq.).
+> - [`supabase-migration-menu-photos.sql`](./supabase-migration-menu-photos.sql)
+>   — adiciona `menu_photos` e o bucket de storage `cardapios` (foto do cardápio).
+
+> **Foto do cardápio (Supabase Storage).** O `supabase-setup.sql` (e a migration
+> acima) já cria o bucket **`cardapios`** como **público** via SQL. Se preferir
+> criar pela interface: Supabase → **Storage** → **New bucket** → nome `cardapios`,
+> marque **Public bucket**. O upload/remoção é feito apenas server-side pela
+> `service_role`; o bucket público serve só para os cadetes lerem a imagem pela URL.
 
 ### 4. Variáveis de ambiente
 Copie o exemplo e preencha:
@@ -96,9 +104,9 @@ Acesse [http://localhost:3000](http://localhost:3000).
     ├── app/
     │   ├── page.tsx          # / (login)
     │   ├── cadete/           # painel do cadete
-    │   ├── admin/            # painel do admin (Gerenciar / Resumo)
-    │   └── api/              # auth, slots, marks, summary
-    ├── components/           # Toggle, ChangePassword, LogoutButton
+    │   ├── admin/            # painel do admin (Gerenciar / Resumo / Cardápio)
+    │   └── api/              # auth, slots, marks, summary, menu-photo
+    ├── components/           # Toggle, ChangePassword, LogoutButton, MenuBanner
     └── lib/                  # auth (JWT), supabase, dates, constants
 ```
 
@@ -113,14 +121,19 @@ Acesse [http://localhost:3000](http://localhost:3000).
   - **3º e 4º esq.** (turmas 24/23): **opt-out** — pré-marcada como "Sim", mas o
     cadete pode desmarcar ("Obrigatória (você pode desmarcar)").
 
-  Bloqueadas ficam em cinza (somente leitura). Inclui troca de senha.
-- **`/admin`** — Dois modos:
+  Bloqueadas ficam em cinza (somente leitura). No topo, se houver um cardápio
+  ativo, aparece a **foto do cardápio da semana** (toque para abrir em tela cheia).
+  Inclui troca de senha.
+- **`/admin`** — Três modos:
   - **Gerenciar Refeições:** cria slots por intervalo de datas/refeição/esquadrão,
     grid editável (dias × refeições), bloqueio/desbloqueio e remoção em lote.
   - **Resumo:** contagem por refeição por esquadrão — `opcional` mostra quem
     marcou; `todos` mostra o efetivo em verde (1º/2º = total fixo; 3º/4º = total
     menos quem desmarcou); `ninguem` mostra `-` em cinza. Detalhe dos cadetes
     (sob demanda) e exportação **Excel (.xlsx)** com uma aba por esquadrão + "Resumo".
+  - **Cardápio:** envia a foto do cardápio da semana (JPG/PNG/WEBP, até 5 MB) com
+    título, preview antes de publicar e histórico com **ativar/desativar/remover**.
+    Apenas um cardápio fica ativo por vez.
 
 ---
 
@@ -140,6 +153,10 @@ Acesse [http://localhost:3000](http://localhost:3000).
 | GET | `/api/marks/summary` | (admin) contagens por slot/esquadrão (sem nomes) |
 | GET | `/api/marks/detail` | (admin) lista de cadetes de um slot/esquadrão (sob demanda) |
 | GET | `/api/marks/export` | (admin) gera o Excel (.xlsx) — abas por esquadrão + Resumo |
+| GET | `/api/menu-photo` | Cardápio ativo (`?all=1` ⇒ admin: histórico completo) |
+| POST | `/api/menu-photo` | (admin) upload da foto (FormData `image` + `title`) e ativa |
+| PATCH | `/api/menu-photo/[id]` | (admin) ativa/desativa um cardápio (`{ active }`) |
+| DELETE | `/api/menu-photo/[id]` | (admin) remove o cardápio e o arquivo do storage |
 
 ---
 
@@ -156,3 +173,6 @@ Acesse [http://localhost:3000](http://localhost:3000).
   "Sim" em refeição opcional) ou `attending = false` (opt-out, "Não" numa refeição
   `todos` do 3º/4º esq.). Sem linha = default do modo (`opcional` ⇒ "Não"; `todos` ⇒
   "Sim"). Único por `(cadet_id, slot_id)`.
+- **menu_photos** — foto do cardápio da semana: `title`, `image_url` (URL pública no
+  bucket `cardapios`), `storage_path` (caminho do arquivo, p/ remoção) e `active`.
+  Apenas um registro `active = true` por vez (a API desativa os anteriores ao publicar).

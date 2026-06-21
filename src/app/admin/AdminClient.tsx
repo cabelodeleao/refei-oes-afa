@@ -5,13 +5,19 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
 import ManageMeals from "./ManageMeals";
 import Summary from "./Summary";
+import MenuManager from "./MenuManager";
 import { toISODate, startOfWeek, addDays } from "@/lib/dates";
 
 interface Props {
   user: { name: string; number: string };
 }
 
-type Tab = "gerenciar" | "resumo";
+type Tab = "gerenciar" | "resumo" | "cardapio";
+
+function parseTab(v: string | null): Tab {
+  if (v === "resumo" || v === "cardapio") return v;
+  return "gerenciar";
+}
 
 export default function AdminClient({ user }: Props) {
   const router = useRouter();
@@ -24,9 +30,7 @@ export default function AdminClient({ user }: Props) {
   const defaultTo = toISODate(addDays(week, 6));
 
   // Valores iniciais lidos da URL (?tab=&from=&to=), com fallback.
-  const [tab, setTab] = useState<Tab>(
-    searchParams.get("tab") === "resumo" ? "resumo" : "gerenciar"
-  );
+  const [tab, setTab] = useState<Tab>(parseTab(searchParams.get("tab")));
   const [from, setFrom] = useState(searchParams.get("from") || defaultFrom);
   const [to, setTo] = useState(searchParams.get("to") || defaultTo);
 
@@ -62,6 +66,12 @@ export default function AdminClient({ user }: Props) {
             <TabButton active={tab === "resumo"} onClick={() => setTab("resumo")}>
               Resumo
             </TabButton>
+            <TabButton
+              active={tab === "cardapio"}
+              onClick={() => setTab("cardapio")}
+            >
+              Cardápio
+            </TabButton>
           </nav>
         </div>
       </header>
@@ -69,8 +79,10 @@ export default function AdminClient({ user }: Props) {
       <main className="mx-auto max-w-5xl px-4 py-5">
         {tab === "gerenciar" ? (
           <ManageMeals from={from} to={to} setFrom={setFrom} setTo={setTo} />
-        ) : (
+        ) : tab === "resumo" ? (
           <Summary from={from} to={to} setFrom={setFrom} setTo={setTo} />
+        ) : (
+          <MenuManager />
         )}
       </main>
     </div>

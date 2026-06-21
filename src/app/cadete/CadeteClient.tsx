@@ -8,11 +8,13 @@ import { apiFetch } from "@/lib/client";
 import {
   MEAL_TYPES,
   MEAL_LABELS,
+  MEAL_ICONS,
   SQUADRON_LABELS,
   isOptOutSquadron,
   type MealType,
   type AccessState,
 } from "@/lib/constants";
+import MenuBanner from "@/components/MenuBanner";
 import { formatLongDate } from "@/lib/dates";
 
 interface Slot {
@@ -121,6 +123,8 @@ export default function CadeteClient({ user }: Props) {
       </header>
 
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-5">
+        <MenuBanner />
+
         <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
           Refeições
         </h2>
@@ -140,9 +144,13 @@ export default function CadeteClient({ user }: Props) {
         )}
 
         {!loading &&
-          days.map(({ date, daySlots }) => (
-            <section key={date} className="card overflow-hidden animate-fade-in">
-              <div className="border-b border-slate-100 bg-slate-50/60 px-5 py-3">
+          days.map(({ date, daySlots }, i) => (
+            <section
+              key={date}
+              className="card overflow-hidden animate-fade-in-up"
+              style={{ animationDelay: `${Math.min(i * 60, 360)}ms` }}
+            >
+              <div className="border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-5 py-3.5">
                 <h3 className="font-semibold capitalize text-navy-800">
                   {formatLongDate(date)}
                 </h3>
@@ -159,11 +167,22 @@ export default function CadeteClient({ user }: Props) {
                   return (
                     <li
                       key={slot.id}
-                      className={`flex items-center justify-between gap-4 px-5 py-3.5 ${
-                        slot.locked ? "bg-slate-50" : ""
+                      className={`flex items-center justify-between gap-4 px-5 py-4 transition-colors ${
+                        slot.locked ? "bg-slate-50" : "hover:bg-slate-50/60"
                       }`}
                     >
-                      <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg ring-1 ring-inset ${
+                            slot.locked
+                              ? "bg-slate-100 text-slate-300 ring-slate-200"
+                              : "bg-navy-50 ring-navy-100"
+                          }`}
+                          aria-hidden
+                        >
+                          {slot.locked ? "🔒" : MEAL_ICONS[mt]}
+                        </span>
+                        <div className="min-w-0">
                         <p
                           className={`font-medium ${
                             slot.locked ? "text-slate-400" : "text-slate-700"
@@ -205,6 +224,7 @@ export default function CadeteClient({ user }: Props) {
                             </span>
                           )}
                         </p>
+                        </div>
                       </div>
                       {strict ? (
                         <span className="chip shrink-0 bg-emerald-100 px-2.5 py-1 text-emerald-700">

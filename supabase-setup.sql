@@ -54,12 +54,28 @@ create table if not exists public.meal_marks (
 );
 
 -- --------------------------------------------------------------------------
+-- Tabela: menu_photos
+-- Foto do cardápio da semana enviada pelo admin e exibida aos cadetes.
+-- Apenas 1 registro com active = true por vez (a API desativa os anteriores).
+--   storage_path: caminho do arquivo no bucket "cardapios" (p/ remoção).
+-- --------------------------------------------------------------------------
+create table if not exists public.menu_photos (
+  id           uuid primary key default gen_random_uuid(),
+  title        text not null,
+  image_url    text not null,
+  storage_path text,
+  active       boolean default true,
+  created_at   timestamptz default now()
+);
+
+-- --------------------------------------------------------------------------
 -- Índices
 -- --------------------------------------------------------------------------
 create index if not exists idx_meal_slots_date   on public.meal_slots (date);
 create index if not exists idx_meal_slots_locked on public.meal_slots (locked);
 create index if not exists idx_meal_marks_slot   on public.meal_marks (slot_id);
 create index if not exists idx_meal_marks_cadet  on public.meal_marks (cadet_id);
+create index if not exists idx_menu_photos_active on public.menu_photos (active);
 
 -- --------------------------------------------------------------------------
 -- Row Level Security
@@ -68,9 +84,10 @@ create index if not exists idx_meal_marks_cadet  on public.meal_marks (cadet_id)
 -- A service_role faz bypass de RLS por padrão; mantemos políticas explícitas
 -- para deixar claro o modelo e bloquear o anon/authenticated key.
 -- --------------------------------------------------------------------------
-alter table public.cadets     enable row level security;
-alter table public.meal_slots enable row level security;
-alter table public.meal_marks enable row level security;
+alter table public.cadets      enable row level security;
+alter table public.meal_slots  enable row level security;
+alter table public.meal_marks  enable row level security;
+alter table public.menu_photos enable row level security;
 
 -- Políticas permissivas apenas para a role de serviço.
 drop policy if exists "service_role full access" on public.cadets;
@@ -84,3 +101,16 @@ create policy "service_role full access" on public.meal_slots
 drop policy if exists "service_role full access" on public.meal_marks;
 create policy "service_role full access" on public.meal_marks
   for all to service_role using (true) with check (true);
+
+drop policy if exists "service_role full access" on public.menu_photos;
+create policy "service_role full access" on public.menu_photos
+  for all to service_role using (true) with check (true);
+
+-- --------------------------------------------------------------------------
+-- Storage: bucket "cardapios" (público) para as fotos do cardápio.
+-- Público = qualquer pessoa com o link lê a imagem (a URL pública é usada na
+-- página do cadete). O upload/remoção é feito só pela service_role (server-side).
+-- --------------------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('cardapios', 'cardapios', true)
+on conflict (id) do update set public = true;

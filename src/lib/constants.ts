@@ -15,6 +15,14 @@ export const MEAL_SHORT: Record<MealType, string> = {
   ceia: "Ceia",
 };
 
+// Ícone (emoji) de cada refeição, usado na UI.
+export const MEAL_ICONS: Record<MealType, string> = {
+  cafe: "☀️",
+  almoco: "🍽️",
+  janta: "🌙",
+  ceia: "✨",
+};
+
 export const ALL_SQUADRONS = [1, 2, 3, 4] as const;
 
 // Estado de acesso de um esquadrão a uma refeição.

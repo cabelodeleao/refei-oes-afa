@@ -142,19 +142,22 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
-              <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-2.5 text-left font-semibold">Refeição</th>
+              <tr className="bg-gradient-to-r from-navy-900 to-navy-700 text-xs uppercase tracking-wide text-blue-50">
+                <th className="px-4 py-3 text-left font-semibold">Refeição</th>
                 {ALL_SQUADRONS.map((sq) => (
-                  <th key={sq} className="px-3 py-2.5 text-center font-semibold">
+                  <th key={sq} className="px-3 py-3 text-center font-semibold">
                     {SQUADRON_SHORT[sq]}
                   </th>
                 ))}
-                <th className="px-3 py-2.5 text-center font-semibold">Total</th>
+                <th className="px-3 py-3 text-center font-semibold">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {slots.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50/60">
+                <tr
+                  key={s.id}
+                  className="odd:bg-white even:bg-slate-50/50 transition-colors hover:bg-navy-50"
+                >
                   <td className="px-4 py-3">
                     <div className="font-semibold text-navy-800">
                       {formatShortDate(s.date)} · {MEAL_SHORT[s.meal_type]}

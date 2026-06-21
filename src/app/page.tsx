@@ -35,26 +35,32 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-navy-900 via-navy-800 to-navy-600 px-4 py-10">
-      <div className="w-full max-w-sm animate-fade-in">
-        <div className="mb-6 text-center">
+    <main className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-gradient-to-br from-navy-900 via-navy-800 to-navy-600 px-4 py-10">
+      {/* Brilhos decorativos suaves ao fundo */}
+      <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-navy-500/30 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-blue-400/20 blur-3xl" />
+
+      <div className="relative w-full max-w-sm animate-fade-in-up">
+        <div className="mb-7 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl shadow-lg ring-1 ring-white/20">
             🍽️
           </div>
-          <h1 className="text-2xl font-bold text-white">Refeições AFA</h1>
-          <p className="mt-1 text-sm text-blue-100/80">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
+            Refeições AFA
+          </h1>
+          <p className="mt-1.5 text-sm text-blue-100/80">
             Marque suas refeições opcionais
           </p>
         </div>
 
-        <div className="card p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="glass p-6 sm:p-7">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label className="mb-1.5 block text-sm font-medium text-blue-50/90">
                 Número do cadete
               </label>
               <input
-                className="input"
+                className="input-glass"
                 placeholder="Ex: 23/001"
                 autoCapitalize="none"
                 autoComplete="username"
@@ -65,11 +71,11 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label className="mb-1.5 block text-sm font-medium text-blue-50/90">
                 Senha
               </label>
               <input
-                className="input"
+                className="input-glass"
                 type="password"
                 placeholder="••••••"
                 autoComplete="current-password"
@@ -80,7 +86,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="rounded-lg border border-red-300/30 bg-red-500/20 px-3 py-2 text-sm text-red-50">
                 {error}
               </p>
             )}
