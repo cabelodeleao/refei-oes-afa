@@ -101,7 +101,7 @@ Acesse [http://localhost:3000](http://localhost:3000).
 ├── supabase-setup.sql        # schema + índices + RLS
 ├── scripts/seed.js           # npm run seed
 ├── middleware.ts             # proteção de rotas + controle de papel
-├── public/                   # manifest.json, sw.js, icon-192/512.svg (PWA)
+├── public/                   # manifest.json, sw.js, ícones PNG + apple-touch (PWA)
 └── src/
     ├── app/
     │   ├── page.tsx          # / (login)

@@ -2,8 +2,14 @@
    Objetivo: carregamento rápido via cache da shell estática. NÃO faz cache de
    respostas de API nem de páginas dinâmicas (sempre rede para dados frescos). */
 
-const CACHE = "refeicoes-afa-v1";
-const SHELL = ["/", "/manifest.json", "/icon-192.svg", "/icon-512.svg"];
+const CACHE = "refeicoes-afa-v2";
+const SHELL = [
+  "/",
+  "/manifest.json",
+  "/web-app-manifest-192x192.png",
+  "/web-app-manifest-512x512.png",
+  "/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
