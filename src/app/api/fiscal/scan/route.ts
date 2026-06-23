@@ -82,34 +82,39 @@ export async function POST(req: Request) {
   let authorized = false;
   let reason = "";
 
-  if (access === "ninguem") {
-    reason = "Seu esquadrão não tem esta refeição";
-  } else if (access === "opcional") {
-    // Opcional: precisa de opt-in explícito (attending=true).
-    const { data: mark } = await supabaseAdmin
+  // Só precisamos consultar a escolha explícita do cadete (meal_marks) quando
+  // a refeição é "opcional" ou "todos" para 3º/4º (opt-out).
+  const needsMark =
+    access === "opcional" ||
+    (access === "todos" && isOptOutSquadron(cadet.squadron));
+
+  let mark: { attending: boolean } | null = null;
+  if (needsMark) {
+    const { data, error: markErr } = await supabaseAdmin
       .from("meal_marks")
       .select("attending")
       .eq("cadet_id", cadet.id)
       .eq("slot_id", slotId)
       .maybeSingle();
+    if (markErr) {
+      return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    }
+    mark = data;
+  }
+
+  if (access === "ninguem") {
+    reason = "Seu esquadrão não tem esta refeição";
+  } else if (access === "opcional") {
+    // Opcional: precisa de opt-in explícito (attending=true).
     authorized = mark?.attending === true;
     if (!authorized) reason = "Não marcou esta refeição";
+  } else if (isOptOutSquadron(cadet.squadron)) {
+    // "todos" 3º/4º: autorizado, exceto se desmarcou (attending=false).
+    authorized = !(mark && mark.attending === false);
+    if (!authorized) reason = "Desmarcou esta refeição";
   } else {
-    // "todos": obrigatória.
-    if (isOptOutSquadron(cadet.squadron)) {
-      // 3º/4º: autorizado, exceto se desmarcou (attending=false).
-      const { data: mark } = await supabaseAdmin
-        .from("meal_marks")
-        .select("attending")
-        .eq("cadet_id", cadet.id)
-        .eq("slot_id", slotId)
-        .maybeSingle();
-      authorized = !(mark && mark.attending === false);
-      if (!authorized) reason = "Desmarcou esta refeição";
-    } else {
-      // 1º/2º: obrigatória estrita, sempre autorizado.
-      authorized = true;
-    }
+    // "todos" 1º/2º: obrigatória estrita, sempre autorizado.
+    authorized = true;
   }
 
   if (!authorized) {
@@ -121,12 +126,16 @@ export async function POST(req: Request) {
   }
 
   // 4) Autorizado: registra a entrada (apenas uma vez por cadete/slot).
-  const { data: existing } = await supabaseAdmin
+  const { data: existing, error: existErr } = await supabaseAdmin
     .from("meal_entries")
     .select("entered_at")
     .eq("cadet_id", cadet.id)
     .eq("slot_id", slotId)
     .maybeSingle();
+
+  if (existErr) {
+    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+  }
 
   if (existing) {
     return NextResponse.json({

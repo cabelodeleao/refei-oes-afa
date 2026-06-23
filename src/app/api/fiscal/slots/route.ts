@@ -29,19 +29,19 @@ export async function GET(req: Request) {
   const rows = data ?? [];
 
   // Quantas entradas já foram registradas em cada slot do dia (para o contador).
+  // Usamos COUNT exato por slot (head:true não transfere linhas) — um dia pode
+  // ter > 1000 entradas (629 cadetes × refeições), o que estouraria o limite
+  // padrão de 1000 linhas do PostgREST se buscássemos as linhas.
   const entered = new Map<string, number>();
-  if (rows.length > 0) {
-    const { data: entries } = await supabaseAdmin
-      .from("meal_entries")
-      .select("slot_id")
-      .in(
-        "slot_id",
-        rows.map((s) => s.id)
-      );
-    for (const e of entries ?? []) {
-      entered.set(e.slot_id, (entered.get(e.slot_id) ?? 0) + 1);
-    }
-  }
+  await Promise.all(
+    rows.map(async (s) => {
+      const { count } = await supabaseAdmin
+        .from("meal_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("slot_id", s.id);
+      entered.set(s.id, count ?? 0);
+    })
+  );
 
   const slots = rows
     .map((s) => ({ ...s, entered: entered.get(s.id) ?? 0 }))
