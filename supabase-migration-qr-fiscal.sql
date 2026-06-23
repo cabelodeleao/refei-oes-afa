@@ -37,7 +37,7 @@ create table if not exists public.meal_entries (
   id         uuid primary key default gen_random_uuid(),
   cadet_id   uuid not null references public.cadets(id) on delete cascade,
   slot_id    uuid not null references public.meal_slots(id) on delete cascade,
-  fiscal_id  uuid references public.cadets(id),
+  fiscal_id  uuid references public.cadets(id) on delete set null,
   entered_at timestamptz default now(),
   unique (cadet_id, slot_id)
 );

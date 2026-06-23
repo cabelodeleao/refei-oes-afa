@@ -46,6 +46,11 @@ políticas de RLS.
 >   — adiciona `cadets.qr_token` e `cadets.is_fiscal`, cria a tabela
 >     `meal_entries` (entradas no rancho) e gera o token de QR dos cadetes
 >     existentes. **Necessária para a fiscalização por QR code.**
+> - [`supabase-migration-fiscal-accounts.sql`](./supabase-migration-fiscal-accounts.sql)
+>   — faz `meal_entries.fiscal_id` usar `ON DELETE SET NULL`, preservando o
+>     histórico de entradas quando uma conta de fiscal é removida. Rode **depois**
+>     da migration de QR. Contas de fiscal (sargentos) são criadas pelo admin na
+>     aba **Fiscais** (ficam em `cadets` com `is_fiscal=true`, `squadron=0`).
 
 > **Foto do cardápio (Supabase Storage).** O `supabase-setup.sql` (e a migration
 > acima) já cria o bucket **`cardapios`** como **público** via SQL. Se preferir

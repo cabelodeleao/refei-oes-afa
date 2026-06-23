@@ -33,9 +33,15 @@ export async function middleware(req: NextRequest) {
     url.pathname = isFiscal ? "/fiscal" : "/cadete";
     return NextResponse.redirect(url);
   }
+  // /cadete é só para cadetes: admin vai p/ /admin, fiscal (sargento) p/ /fiscal.
   if (pathname.startsWith("/cadete") && session.is_admin) {
     const url = req.nextUrl.clone();
     url.pathname = "/admin";
+    return NextResponse.redirect(url);
+  }
+  if (pathname.startsWith("/cadete") && session.is_fiscal && !session.is_admin) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/fiscal";
     return NextResponse.redirect(url);
   }
 

@@ -60,13 +60,14 @@ create table if not exists public.meal_marks (
 -- Registro de entrada de UM cadete em UMA refeição (slot), feito pelo fiscal
 -- na porta do rancho via leitura do QR.
 --   UNIQUE(cadet_id, slot_id) impede registro duplicado na mesma refeição.
---   fiscal_id = conta de fiscal que fez a leitura.
+--   fiscal_id = conta de fiscal que fez a leitura. ON DELETE SET NULL para
+--   preservar o histórico mesmo que a conta de fiscal seja removida.
 -- --------------------------------------------------------------------------
 create table if not exists public.meal_entries (
   id         uuid primary key default gen_random_uuid(),
   cadet_id   uuid not null references public.cadets(id) on delete cascade,
   slot_id    uuid not null references public.meal_slots(id) on delete cascade,
-  fiscal_id  uuid references public.cadets(id),
+  fiscal_id  uuid references public.cadets(id) on delete set null,
   entered_at timestamptz default now(),
   unique (cadet_id, slot_id)
 );

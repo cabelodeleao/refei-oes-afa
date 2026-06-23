@@ -9,20 +9,28 @@ import Summary from "./Summary";
 import MenuManager from "./MenuManager";
 import Cadets from "./Cadets";
 import Fiscalizacao from "./Fiscalizacao";
+import Fiscais from "./Fiscais";
 import { toISODate, startOfWeek, addDays } from "@/lib/dates";
 
 interface Props {
   user: { name: string; number: string };
 }
 
-type Tab = "gerenciar" | "resumo" | "fiscalizacao" | "cardapio" | "cadetes";
+type Tab =
+  | "gerenciar"
+  | "resumo"
+  | "fiscalizacao"
+  | "cardapio"
+  | "cadetes"
+  | "fiscais";
 
 function parseTab(v: string | null): Tab {
   if (
     v === "resumo" ||
     v === "fiscalizacao" ||
     v === "cardapio" ||
-    v === "cadetes"
+    v === "cadetes" ||
+    v === "fiscais"
   )
     return v;
   return "gerenciar";
@@ -105,7 +113,7 @@ export default function AdminClient({ user }: Props) {
               <LogoutButton />
             </div>
           </div>
-          <nav className="flex gap-1">
+          <nav className="flex gap-1 overflow-x-auto">
             <TabButton
               active={tab === "gerenciar"}
               onClick={() => setTab("gerenciar")}
@@ -133,6 +141,12 @@ export default function AdminClient({ user }: Props) {
             >
               Cadetes
             </TabButton>
+            <TabButton
+              active={tab === "fiscais"}
+              onClick={() => setTab("fiscais")}
+            >
+              Fiscais
+            </TabButton>
           </nav>
         </div>
       </header>
@@ -146,8 +160,10 @@ export default function AdminClient({ user }: Props) {
           <Fiscalizacao />
         ) : tab === "cardapio" ? (
           <MenuManager />
-        ) : (
+        ) : tab === "cadetes" ? (
           <Cadets />
+        ) : (
+          <Fiscais />
         )}
       </main>
     </div>
@@ -166,7 +182,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`relative rounded-t-lg px-4 py-2.5 text-sm font-semibold transition ${
+      className={`relative shrink-0 whitespace-nowrap rounded-t-lg px-4 py-2.5 text-sm font-semibold transition ${
         active
           ? "bg-slate-100 text-navy-800 dark:bg-gray-900 dark:text-gray-100"
           : "text-blue-100/80 hover:bg-white/10"

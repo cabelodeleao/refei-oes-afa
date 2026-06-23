@@ -252,12 +252,6 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
             <p className="text-xs text-blue-100/80">{user.name}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <a
-              href="/cadete"
-              className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium text-white ring-1 ring-white/20 transition hover:bg-white/20"
-            >
-              Minhas refeições
-            </a>
             <ThemeToggle />
             <LogoutButton />
           </div>

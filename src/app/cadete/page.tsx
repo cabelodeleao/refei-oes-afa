@@ -30,6 +30,8 @@ export default async function CadetePage() {
   const session = await getSession();
   if (!session) redirect("/");
   if (session.is_admin) redirect("/admin");
+  // Fiscais (sargentos, squadron 0) não são cadetes e não marcam refeições.
+  if (session.is_fiscal) redirect("/fiscal");
 
   const qrToken = await ensureQrToken(session.sub);
 
