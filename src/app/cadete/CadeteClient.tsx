@@ -16,6 +16,7 @@ import {
   type AccessState,
 } from "@/lib/constants";
 import MenuBanner from "@/components/MenuBanner";
+import MyQrCode from "@/components/MyQrCode";
 import { useToast } from "@/components/Toast";
 import { formatLongDate } from "@/lib/dates";
 
@@ -30,9 +31,10 @@ interface Slot {
 
 interface Props {
   user: { name: string; number: string; squadron: number };
+  qrToken: string | null;
 }
 
-export default function CadeteClient({ user }: Props) {
+export default function CadeteClient({ user, qrToken }: Props) {
   const toast = useToast();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,6 +150,8 @@ export default function CadeteClient({ user }: Props) {
 
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-5">
         <MenuBanner />
+
+        <MyQrCode token={qrToken} name={user.name} number={user.number} />
 
         <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
           Refeições

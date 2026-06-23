@@ -32,7 +32,8 @@ npm install
 ### 3. Configurar o banco
 No painel do Supabase → **SQL Editor**, cole e execute o conteúdo de
 [`supabase-setup.sql`](./supabase-setup.sql). Ele cria as tabelas
-(`cadets`, `meal_slots`, `meal_marks`), os índices e as políticas de RLS.
+(`cadets`, `meal_slots`, `meal_marks`, `meal_entries`), os índices e as
+políticas de RLS.
 
 > **Atualizando um banco antigo?** Rode, uma única vez, as migrations que faltarem:
 > - [`supabase-migration-squadrons-jsonb.sql`](./supabase-migration-squadrons-jsonb.sql)
@@ -41,6 +42,10 @@ No painel do Supabase → **SQL Editor**, cole e execute o conteúdo de
 >   — adiciona `meal_marks.attending` (suporte ao opt-out do 3º/4º esq.).
 > - [`supabase-migration-menu-photos.sql`](./supabase-migration-menu-photos.sql)
 >   — adiciona `menu_photos` e o bucket de storage `cardapios` (foto do cardápio).
+> - [`supabase-migration-qr-fiscal.sql`](./supabase-migration-qr-fiscal.sql)
+>   — adiciona `cadets.qr_token` e `cadets.is_fiscal`, cria a tabela
+>     `meal_entries` (entradas no rancho) e gera o token de QR dos cadetes
+>     existentes. **Necessária para a fiscalização por QR code.**
 
 > **Foto do cardápio (Supabase Storage).** O `supabase-setup.sql` (e a migration
 > acima) já cria o bucket **`cardapios`** como **público** via SQL. Se preferir

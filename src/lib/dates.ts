@@ -62,3 +62,12 @@ export function addDays(date: Date, n: number): Date {
   d.setDate(d.getDate() + n);
   return d;
 }
+
+// Data de "hoje" no fuso de Brasília (America/Sao_Paulo), em "YYYY-MM-DD".
+// O servidor (Vercel) roda em UTC; sem isto, à noite "hoje" viraria o dia
+// seguinte. en-CA formata como YYYY-MM-DD.
+export function todaySaoPaulo(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date());
+}

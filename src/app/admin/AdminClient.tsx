@@ -8,16 +8,23 @@ import ManageMeals from "./ManageMeals";
 import Summary from "./Summary";
 import MenuManager from "./MenuManager";
 import Cadets from "./Cadets";
+import Fiscalizacao from "./Fiscalizacao";
 import { toISODate, startOfWeek, addDays } from "@/lib/dates";
 
 interface Props {
   user: { name: string; number: string };
 }
 
-type Tab = "gerenciar" | "resumo" | "cardapio" | "cadetes";
+type Tab = "gerenciar" | "resumo" | "fiscalizacao" | "cardapio" | "cadetes";
 
 function parseTab(v: string | null): Tab {
-  if (v === "resumo" || v === "cardapio" || v === "cadetes") return v;
+  if (
+    v === "resumo" ||
+    v === "fiscalizacao" ||
+    v === "cardapio" ||
+    v === "cadetes"
+  )
+    return v;
   return "gerenciar";
 }
 
@@ -109,6 +116,12 @@ export default function AdminClient({ user }: Props) {
               Resumo
             </TabButton>
             <TabButton
+              active={tab === "fiscalizacao"}
+              onClick={() => setTab("fiscalizacao")}
+            >
+              Fiscalização
+            </TabButton>
+            <TabButton
               active={tab === "cardapio"}
               onClick={() => setTab("cardapio")}
             >
@@ -129,6 +142,8 @@ export default function AdminClient({ user }: Props) {
           <ManageMeals from={from} to={to} setFrom={setFrom} setTo={setTo} />
         ) : tab === "resumo" ? (
           <Summary from={from} to={to} setFrom={setFrom} setTo={setTo} />
+        ) : tab === "fiscalizacao" ? (
+          <Fiscalizacao />
         ) : tab === "cardapio" ? (
           <MenuManager />
         ) : (

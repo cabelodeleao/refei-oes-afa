@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 
   let query = supabaseAdmin
     .from("cadets")
-    .select("id, number, name, squadron")
+    .select("id, number, name, squadron, is_fiscal")
     .gt("squadron", 0)
     .order("number", { ascending: true })
     .limit(50);

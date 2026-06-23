@@ -25,15 +25,30 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  const isFiscal = Boolean(session.is_fiscal || session.is_admin);
+
   // Controle de acesso por papel nas páginas
   if (pathname.startsWith("/admin") && !session.is_admin) {
     const url = req.nextUrl.clone();
-    url.pathname = "/cadete";
+    url.pathname = isFiscal ? "/fiscal" : "/cadete";
     return NextResponse.redirect(url);
   }
   if (pathname.startsWith("/cadete") && session.is_admin) {
     const url = req.nextUrl.clone();
     url.pathname = "/admin";
+    return NextResponse.redirect(url);
+  }
+
+  // /fiscal e /api/fiscal/*: só fiscal ou admin.
+  if (
+    (pathname.startsWith("/fiscal") || pathname.startsWith("/api/fiscal")) &&
+    !isFiscal
+  ) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = "/cadete";
     return NextResponse.redirect(url);
   }
 
@@ -44,10 +59,12 @@ export const config = {
   matcher: [
     "/cadete/:path*",
     "/admin/:path*",
+    "/fiscal/:path*",
     "/api/slots/:path*",
     "/api/marks/:path*",
     "/api/menu-photo/:path*",
     "/api/admin/:path*",
+    "/api/fiscal/:path*",
     "/api/auth/change-password",
     "/api/auth/logout",
   ],

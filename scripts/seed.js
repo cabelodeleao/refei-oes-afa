@@ -8,8 +8,14 @@ require("dotenv").config({ path: ".env.local" });
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { createClient } = require("@supabase/supabase-js");
+
+// Token secreto e aleatório (base64url) usado no QR code de cada cadete.
+function newQrToken() {
+  return crypto.randomBytes(18).toString("base64url");
+}
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -50,6 +56,7 @@ async function main() {
       squadron: c.squadron,
       is_admin: false,
       password_hash: passwordHash,
+      qr_token: newQrToken(),
     })),
   ];
 

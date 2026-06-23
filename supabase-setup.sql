@@ -16,6 +16,8 @@ create table if not exists public.cadets (
   squadron      integer not null,            -- 0 = admin, 1-4 = esquadrões
   password_hash text not null,
   is_admin      boolean default false,
+  is_fiscal     boolean default false,       -- conta que fiscaliza o rancho (QR)
+  qr_token      text unique,                 -- token secreto do QR do cadete
   created_at    timestamptz default now()
 );
 
@@ -54,6 +56,22 @@ create table if not exists public.meal_marks (
 );
 
 -- --------------------------------------------------------------------------
+-- Tabela: meal_entries
+-- Registro de entrada de UM cadete em UMA refeição (slot), feito pelo fiscal
+-- na porta do rancho via leitura do QR.
+--   UNIQUE(cadet_id, slot_id) impede registro duplicado na mesma refeição.
+--   fiscal_id = conta de fiscal que fez a leitura.
+-- --------------------------------------------------------------------------
+create table if not exists public.meal_entries (
+  id         uuid primary key default gen_random_uuid(),
+  cadet_id   uuid not null references public.cadets(id) on delete cascade,
+  slot_id    uuid not null references public.meal_slots(id) on delete cascade,
+  fiscal_id  uuid references public.cadets(id),
+  entered_at timestamptz default now(),
+  unique (cadet_id, slot_id)
+);
+
+-- --------------------------------------------------------------------------
 -- Tabela: menu_photos
 -- Foto do cardápio da semana enviada pelo admin e exibida aos cadetes.
 -- Apenas 1 registro com active = true por vez (a API desativa os anteriores).
@@ -75,6 +93,9 @@ create index if not exists idx_meal_slots_date   on public.meal_slots (date);
 create index if not exists idx_meal_slots_locked on public.meal_slots (locked);
 create index if not exists idx_meal_marks_slot   on public.meal_marks (slot_id);
 create index if not exists idx_meal_marks_cadet  on public.meal_marks (cadet_id);
+create index if not exists idx_meal_entries_slot  on public.meal_entries (slot_id);
+create index if not exists idx_meal_entries_cadet on public.meal_entries (cadet_id);
+create index if not exists idx_cadets_is_fiscal   on public.cadets (is_fiscal);
 create index if not exists idx_menu_photos_active on public.menu_photos (active);
 
 -- --------------------------------------------------------------------------
@@ -84,10 +105,11 @@ create index if not exists idx_menu_photos_active on public.menu_photos (active)
 -- A service_role faz bypass de RLS por padrão; mantemos políticas explícitas
 -- para deixar claro o modelo e bloquear o anon/authenticated key.
 -- --------------------------------------------------------------------------
-alter table public.cadets      enable row level security;
-alter table public.meal_slots  enable row level security;
-alter table public.meal_marks  enable row level security;
-alter table public.menu_photos enable row level security;
+alter table public.cadets       enable row level security;
+alter table public.meal_slots   enable row level security;
+alter table public.meal_marks   enable row level security;
+alter table public.meal_entries enable row level security;
+alter table public.menu_photos  enable row level security;
 
 -- Políticas permissivas apenas para a role de serviço.
 drop policy if exists "service_role full access" on public.cadets;
@@ -100,6 +122,10 @@ create policy "service_role full access" on public.meal_slots
 
 drop policy if exists "service_role full access" on public.meal_marks;
 create policy "service_role full access" on public.meal_marks
+  for all to service_role using (true) with check (true);
+
+drop policy if exists "service_role full access" on public.meal_entries;
+create policy "service_role full access" on public.meal_entries
   for all to service_role using (true) with check (true);
 
 drop policy if exists "service_role full access" on public.menu_photos;

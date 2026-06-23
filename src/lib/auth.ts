@@ -8,6 +8,7 @@ export interface SessionUser extends JWTPayload {
   name: string;
   squadron: number;
   is_admin: boolean;
+  is_fiscal: boolean;
 }
 
 const encoder = new TextEncoder();
@@ -24,6 +25,7 @@ export interface SessionInput {
   name: string;
   squadron: number;
   is_admin: boolean;
+  is_fiscal: boolean;
 }
 
 export async function signSession(user: SessionInput): Promise<string> {
@@ -32,6 +34,7 @@ export async function signSession(user: SessionInput): Promise<string> {
     name: user.name,
     squadron: user.squadron,
     is_admin: user.is_admin,
+    is_fiscal: user.is_fiscal,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.sub)

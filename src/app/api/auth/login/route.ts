@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
   const { data: cadet, error } = await supabaseAdmin
     .from("cadets")
-    .select("id, number, name, squadron, password_hash, is_admin")
+    .select("id, number, name, squadron, password_hash, is_admin, is_fiscal")
     .eq("number", number)
     .maybeSingle();
 
@@ -74,14 +74,20 @@ export async function POST(req: Request) {
     name: cadet.name,
     squadron: cadet.squadron,
     is_admin: cadet.is_admin,
+    is_fiscal: cadet.is_fiscal ?? false,
   });
 
-  const redirect = cadet.is_admin ? "/admin" : "/cadete";
+  const redirect = cadet.is_admin
+    ? "/admin"
+    : cadet.is_fiscal
+      ? "/fiscal"
+      : "/cadete";
 
   const res = NextResponse.json({
     name: cadet.name,
     number: cadet.number,
     is_admin: cadet.is_admin,
+    is_fiscal: cadet.is_fiscal ?? false,
     redirect,
   });
 
