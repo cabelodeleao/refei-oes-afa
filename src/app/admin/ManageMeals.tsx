@@ -95,31 +95,6 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     existing?: Slot;
   } | null>(null);
 
-  // Barra "Criar refeições" no formato normal (expandida) por padrão. Pode ser
-  // recolhida (botão «) e a preferência é lembrada no localStorage. Como agora
-  // o painel usa a largura total da tela, o grid já tem espaço de sobra com a
-  // barra aberta.
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem("manageMeals.createOpen");
-      if (v !== null) setSidebarOpen(v === "1");
-    } catch {
-      /* localStorage indisponível: mantém o default */
-    }
-  }, []);
-  function toggleSidebar() {
-    setSidebarOpen((o) => {
-      const n = !o;
-      try {
-        localStorage.setItem("manageMeals.createOpen", n ? "1" : "0");
-      } catch {
-        /* ignora */
-      }
-      return n;
-    });
-  }
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -233,35 +208,24 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Duas colunas no desktop: form (esq.) | tabela larga (dir.). Quando a
-          barra é recolhida, vira um trilho fino e o grid ocupa o resto.
-          Uma coluna no mobile. */}
-      <div
-        className={`grid items-start gap-4 ${
-          sidebarOpen
-            ? "lg:grid-cols-[290px_minmax(0,1fr)]"
-            : "lg:grid-cols-[48px_minmax(0,1fr)]"
-        }`}
-      >
-        {sidebarOpen ? (
-          <CreatePanel
-            defaultFrom={from}
-            defaultTo={to}
-            existing={slots}
-            onCollapse={toggleSidebar}
-            onCreated={(msg, ok = true) => {
-              if (ok) {
-                toast.success(msg);
-                load();
-              } else {
-                toast.error(msg);
-              }
-            }}
-          />
-        ) : (
-          <CollapsedSidebar onExpand={toggleSidebar} />
-        )}
+    // Meio-termo: aproveita bem a tela, mas com um teto p/ não esticar demais
+    // as células (e suas pílulas) em monitores largos.
+    <div className="space-y-4 2xl:max-w-[1600px]">
+      {/* Duas colunas no desktop: form (esq.) | tabela (dir.). Uma no mobile. */}
+      <div className="grid items-start gap-4 lg:grid-cols-[290px_minmax(0,1fr)]">
+        <CreatePanel
+          defaultFrom={from}
+          defaultTo={to}
+          existing={slots}
+          onCreated={(msg, ok = true) => {
+            if (ok) {
+              toast.success(msg);
+              load();
+            } else {
+              toast.error(msg);
+            }
+          }}
+        />
 
         {/* Grid de slots existentes */}
         <section className="card overflow-hidden">
@@ -630,10 +594,10 @@ const STATE_ROW: Record<AccessState, string> = {
 function SquadronRow({ sq, state }: { sq: number; state: AccessState }) {
   return (
     <span
-      className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${STATE_ROW[state]}`}
+      className={`inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${STATE_ROW[state]}`}
       title={`${sq}º Esquadrão: ${STATE_PILL[state].label}`}
     >
-      {/* Preenche a largura da célula: esquadrão à esquerda, estado à direita. */}
+      {/* Compacta: rótulo + estado lado a lado, sem vão no meio. */}
       <span className="opacity-90">{sq}º Esq</span>
       <span>{STATE_PILL[state].label}</span>
     </span>
@@ -825,38 +789,16 @@ function EditModal({
 
 // ---------------------------------------------------------------------------
 
-// Trilho fino exibido quando a barra "Criar refeições" está recolhida. Clicar
-// reabre o painel. No mobile vira um botão de largura total no topo.
-function CollapsedSidebar({ onExpand }: { onExpand: () => void }) {
-  return (
-    <button
-      onClick={onExpand}
-      title="Mostrar painel de criar refeições"
-      aria-label="Mostrar painel de criar refeições"
-      className="card flex w-full items-center justify-center gap-2 px-3 py-3 font-semibold text-navy-700 transition hover:bg-slate-50 dark:text-gray-200 dark:hover:bg-gray-700/50 lg:h-full lg:flex-col lg:py-5"
-    >
-      <span className="text-lg">➕</span>
-      <span className="text-sm lg:[writing-mode:vertical-rl] lg:rotate-180">
-        Criar refeições
-      </span>
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
 function CreatePanel({
   defaultFrom,
   defaultTo,
   existing,
   onCreated,
-  onCollapse,
 }: {
   defaultFrom: string;
   defaultTo: string;
   existing: Slot[];
   onCreated: (msg: string, ok?: boolean) => void;
-  onCollapse: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [from, setFrom] = useState(defaultFrom);
@@ -951,29 +893,19 @@ function CreatePanel({
 
   return (
     <section className="card overflow-hidden">
-      <div className="flex w-full items-center justify-between px-4 py-3">
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-2"
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-4 py-3"
+      >
+        <h2 className="font-bold text-navy-800 dark:text-gray-100">
+          ➕ Criar refeições
+        </h2>
+        <span
+          className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
         >
-          <h2 className="font-bold text-navy-800 dark:text-gray-100">
-            ➕ Criar refeições
-          </h2>
-          <span
-            className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-          >
-            ▾
-          </span>
-        </button>
-        <button
-          onClick={onCollapse}
-          title="Recolher painel — libera a largura para a tabela"
-          aria-label="Recolher painel de criar refeições"
-          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-navy-600 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-        >
-          «
-        </button>
-      </div>
+          ▾
+        </span>
+      </button>
 
       {open && (
         <div className="space-y-4 border-t border-slate-100 px-4 py-4 animate-fade-in dark:border-gray-700">
