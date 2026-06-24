@@ -95,6 +95,30 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     existing?: Slot;
   } | null>(null);
 
+  // Barra "Criar refeições" recolhível. Default recolhida: assim o grid
+  // "Refeições criadas" ocupa a largura toda (texto por extenso, sem corte).
+  // A preferência é lembrada no localStorage.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("manageMeals.sidebarOpen");
+      if (v !== null) setSidebarOpen(v === "1");
+    } catch {
+      /* localStorage indisponível: mantém o default */
+    }
+  }, []);
+  function toggleSidebar() {
+    setSidebarOpen((o) => {
+      const n = !o;
+      try {
+        localStorage.setItem("manageMeals.sidebarOpen", n ? "1" : "0");
+      } catch {
+        /* ignora */
+      }
+      return n;
+    });
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -209,22 +233,34 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Duas colunas no desktop: form estreito (esq.) | tabela larga (dir.).
+      {/* Duas colunas no desktop: form (esq.) | tabela larga (dir.). Quando a
+          barra é recolhida, vira um trilho fino e o grid ocupa o resto.
           Uma coluna no mobile. */}
-      <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <CreatePanel
-          defaultFrom={from}
-          defaultTo={to}
-          existing={slots}
-          onCreated={(msg, ok = true) => {
-            if (ok) {
-              toast.success(msg);
-              load();
-            } else {
-              toast.error(msg);
-            }
-          }}
-        />
+      <div
+        className={`grid items-start gap-4 ${
+          sidebarOpen
+            ? "lg:grid-cols-[290px_minmax(0,1fr)]"
+            : "lg:grid-cols-[48px_minmax(0,1fr)]"
+        }`}
+      >
+        {sidebarOpen ? (
+          <CreatePanel
+            defaultFrom={from}
+            defaultTo={to}
+            existing={slots}
+            onCollapse={toggleSidebar}
+            onCreated={(msg, ok = true) => {
+              if (ok) {
+                toast.success(msg);
+                load();
+              } else {
+                toast.error(msg);
+              }
+            }}
+          />
+        ) : (
+          <CollapsedSidebar onExpand={toggleSidebar} />
+        )}
 
         {/* Grid de slots existentes */}
         <section className="card overflow-hidden">
@@ -789,16 +825,38 @@ function EditModal({
 
 // ---------------------------------------------------------------------------
 
+// Trilho fino exibido quando a barra "Criar refeições" está recolhida. Clicar
+// reabre o painel. No mobile vira um botão de largura total no topo.
+function CollapsedSidebar({ onExpand }: { onExpand: () => void }) {
+  return (
+    <button
+      onClick={onExpand}
+      title="Mostrar painel de criar refeições"
+      aria-label="Mostrar painel de criar refeições"
+      className="card flex w-full items-center justify-center gap-2 px-3 py-3 font-semibold text-navy-700 transition hover:bg-slate-50 dark:text-gray-200 dark:hover:bg-gray-700/50 lg:h-full lg:flex-col lg:py-5"
+    >
+      <span className="text-lg">➕</span>
+      <span className="text-sm lg:[writing-mode:vertical-rl] lg:rotate-180">
+        Criar refeições
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 function CreatePanel({
   defaultFrom,
   defaultTo,
   existing,
   onCreated,
+  onCollapse,
 }: {
   defaultFrom: string;
   defaultTo: string;
   existing: Slot[];
   onCreated: (msg: string, ok?: boolean) => void;
+  onCollapse: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [from, setFrom] = useState(defaultFrom);
@@ -893,15 +951,29 @@ function CreatePanel({
 
   return (
     <section className="card overflow-hidden">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between px-4 py-3"
-      >
-        <h2 className="font-bold text-navy-800 dark:text-gray-100">➕ Criar refeições</h2>
-        <span className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>
-          ▾
-        </span>
-      </button>
+      <div className="flex w-full items-center justify-between px-4 py-3">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-2"
+        >
+          <h2 className="font-bold text-navy-800 dark:text-gray-100">
+            ➕ Criar refeições
+          </h2>
+          <span
+            className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          >
+            ▾
+          </span>
+        </button>
+        <button
+          onClick={onCollapse}
+          title="Recolher painel — libera a largura para a tabela"
+          aria-label="Recolher painel de criar refeições"
+          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-navy-600 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+        >
+          «
+        </button>
+      </div>
 
       {open && (
         <div className="space-y-4 border-t border-slate-100 px-4 py-4 animate-fade-in dark:border-gray-700">
