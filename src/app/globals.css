@@ -315,17 +315,6 @@ body {
 .cad-allday.disabled input {
   cursor: not-allowed;
 }
-/* Indicador discreto de salvamento (debounce) na seção "Suas Refeições". */
-.cad-save {
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.cad-save-busy {
-  color: #8b97a8;
-}
-.cad-save-ok {
-  color: #5fd0a0;
-}
 .cad-meal {
   width: 100%;
   display: flex;

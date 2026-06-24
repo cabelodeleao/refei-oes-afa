@@ -40,16 +40,6 @@ export default function CadeteClient({ user, qrToken }: Props) {
   const [pwOpen, setPwOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Indicador discreto de salvamento. O SAVE é imediato a cada clique; só o
-  // TOAST de sucesso é agrupado (debounce 2s) para não pipocar a cada marcação.
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
-    "idle"
-  );
-  const inFlightRef = useRef(0); // saves em andamento
-  const hadErrorRef = useRef(false); // houve erro desde o último toast?
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
-  const savedTimer = useRef<ReturnType<typeof setTimeout>>();
-
   useEffect(() => {
     (async () => {
       try {
@@ -65,68 +55,32 @@ export default function CadeteClient({ user, qrToken }: Props) {
     })();
   }, []);
 
-  useEffect(
-    () => () => {
-      clearTimeout(toastTimer.current);
-      clearTimeout(savedTimer.current);
-    },
-    []
-  );
-
-  // (Re)agenda o único toast de sucesso: 2s após o último save bem-sucedido.
-  const scheduleSuccessToast = useCallback(() => {
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => {
-      if (!hadErrorRef.current) toast.success("Refeições salvas com sucesso! ✓");
-      hadErrorRef.current = false;
-    }, 2000);
-  }, [toast]);
-
-  // Salva UMA refeição IMEDIATAMENTE. A UI já foi atualizada de forma otimista
-  // por quem chamou; aqui persistimos e tratamos erro/indicador. Saves
-  // concorrentes não se cancelam — só o toast de sucesso é agrupado.
+  // Persiste UMA marcação em segundo plano. A UI já foi atualizada de forma
+  // otimista por quem chamou (zero delay). Em caso de sucesso, nada acontece —
+  // o próprio estado visual da refeição é o feedback. Só falhas geram aviso:
+  // aí revertemos aquele toggle específico e mostramos um toast de erro.
   const saveMark = useCallback(
     async (slotId: string, marked: boolean) => {
-      inFlightRef.current += 1;
-      clearTimeout(savedTimer.current);
-      setSaveStatus("saving");
       try {
         const res = await apiFetch("/api/marks", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ slot_id: slotId, marked }),
         });
-        if (res.ok) {
-          scheduleSuccessToast();
-        } else {
-          // Erro aparece na hora (não espera o debounce) e desfaz o otimismo.
-          hadErrorRef.current = true;
-          clearTimeout(toastTimer.current);
+        if (!res.ok) {
           setSlots((prev) =>
             prev.map((s) => (s.id === slotId ? { ...s, marked: !marked } : s))
           );
           toast.error("Não foi possível salvar uma refeição. Tente novamente.");
         }
       } catch {
-        hadErrorRef.current = true;
-        clearTimeout(toastTimer.current);
         setSlots((prev) =>
           prev.map((s) => (s.id === slotId ? { ...s, marked: !marked } : s))
         );
         toast.error("Erro de conexão ao salvar.");
-      } finally {
-        inFlightRef.current -= 1;
-        if (inFlightRef.current === 0) {
-          if (hadErrorRef.current) {
-            setSaveStatus("idle");
-          } else {
-            setSaveStatus("saved");
-            savedTimer.current = setTimeout(() => setSaveStatus("idle"), 2500);
-          }
-        }
       }
     },
-    [scheduleSuccessToast, toast]
+    [toast]
   );
 
   // Agrupa por data, mantendo ordem cronológica.
@@ -218,13 +172,7 @@ export default function CadeteClient({ user, qrToken }: Props) {
         {/* Seção */}
         <div className="cad-max cad-sect">
           <h2>Suas Refeições</h2>
-          {saveStatus === "saving" ? (
-            <div className="cad-save cad-save-busy">Salvando…</div>
-          ) : saveStatus === "saved" ? (
-            <div className="cad-save cad-save-ok">Salvo ✓</div>
-          ) : (
-            <div className="cad-hint">Toque para marcar</div>
-          )}
+          <div className="cad-hint">Toque para marcar</div>
         </div>
 
         {loading && (
