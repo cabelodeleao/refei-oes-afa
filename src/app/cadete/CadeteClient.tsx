@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Toggle from "@/components/Toggle";
-import ChangePassword from "@/components/ChangePassword";
-import LogoutButton from "@/components/LogoutButton";
-import ThemeToggle from "@/components/ThemeToggle";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client";
 import {
   MEAL_TYPES,
@@ -36,10 +33,13 @@ interface Props {
 
 export default function CadeteClient({ user, qrToken }: Props) {
   const toast = useToast();
+  const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+  const [pwOpen, setPwOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Toast de "salvo" com debounce: ao marcar várias refeições em sequência,
   // mostra um único toast ~700ms após a última gravação bem-sucedida.
@@ -104,7 +104,6 @@ export default function CadeteClient({ user, qrToken }: Props) {
         body: JSON.stringify({ slot_id: slot.id, marked: next }),
       });
       if (!res.ok) {
-        // reverte
         setSlots((prev) =>
           prev.map((s) => (s.id === slot.id ? { ...s, marked: !next } : s))
         );
@@ -128,165 +127,276 @@ export default function CadeteClient({ user, qrToken }: Props) {
     }
   }
 
+  async function logout() {
+    setLoggingOut(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/");
+    router.refresh();
+  }
+
+  const initial = (user.name.trim()[0] ?? "?").toUpperCase();
+
   return (
-    <div className="min-h-[100dvh]">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-gradient-to-r from-navy-800 to-navy-600 text-white shadow-md">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3.5">
-          <div className="min-w-0">
-            <p className="truncate text-base font-bold leading-tight">
-              {user.name}
-            </p>
-            <p className="text-xs text-blue-100/80">
-              {user.number} · {SQUADRON_LABELS[user.squadron] ?? "—"}
-            </p>
+    <div className="cad-root">
+      <div className="cad-wrap">
+        {/* Topbar */}
+        <div className="cad-max cad-topbar">
+          <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+            <div className="cad-avatar">{initial}</div>
+            <div style={{ minWidth: 0 }}>
+              <div className="cad-name">{user.name}</div>
+              <div className="cad-meta">
+                {user.number} · {SQUADRON_LABELS[user.squadron] ?? "—"}
+              </div>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <ThemeToggle />
-            <LogoutButton />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button className="cad-btn" onClick={() => setPwOpen(true)}>
+              Trocar senha
+            </button>
+            <button
+              className="cad-btn cad-btn-out"
+              onClick={logout}
+              disabled={loggingOut}
+            >
+              Sair
+            </button>
           </div>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-5xl space-y-4 px-4 py-5 pb-24">
-        <MenuBanner />
+        {/* Cardápio: imagem inteira visível no topo (clicável p/ ampliar) */}
+        <div className="cad-max">
+          <MenuBanner />
+        </div>
 
-        <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
-          Suas refeições
-        </h2>
+        {/* Seção */}
+        <div className="cad-max cad-sect">
+          <h2>Suas Refeições</h2>
+          <div className="cad-hint">Toque para marcar</div>
+        </div>
 
         {loading && (
-          <div className="card p-8 text-center text-slate-500 dark:text-gray-400">
+          <div
+            className="cad-max"
+            style={{ marginTop: 16, color: "#8b97a8", fontSize: 14 }}
+          >
             Carregando…
           </div>
         )}
 
         {error && !loading && (
-          <div className="card p-6 text-center text-red-600 dark:text-red-400">
+          <div
+            className="cad-max"
+            style={{ marginTop: 16, color: "#ff9a9a", fontSize: 14 }}
+          >
             {error}
           </div>
         )}
 
         {!loading && !error && days.length === 0 && (
-          <div className="card p-8 text-center text-slate-500 dark:text-gray-400">
-            Nenhuma refeição disponível no momento
+          <div
+            className="cad-max"
+            style={{ marginTop: 16, color: "#8b97a8", fontSize: 14 }}
+          >
+            Nenhuma refeição disponível no momento.
           </div>
         )}
 
-        {/* Grade responsiva de dias: 1 / 2 / 3 colunas. */}
         {!loading && days.length > 0 && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {days.map(({ date, daySlots }, i) => {
+          <div className="cad-max cad-grid">
+            {days.map(({ date, daySlots }) => {
               const markedCount = daySlots.filter((s) => s.marked).length;
+              const [wd, dt] = formatLongDate(date).split(", ");
               return (
-              <section
-                key={date}
-                className="card overflow-hidden animate-fade-in-up"
-                style={{ animationDelay: `${Math.min(i * 50, 360)}ms` }}
-              >
-                <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-3 py-2 dark:border-gray-700 dark:from-gray-700/40 dark:to-gray-800">
-                  <h3 className="text-sm font-semibold capitalize text-navy-800 dark:text-gray-100">
-                    {formatLongDate(date)}
-                  </h3>
-                  <span
-                    className={`chip shrink-0 px-2 py-0.5 text-[11px] font-semibold ${
-                      markedCount === 0
-                        ? "bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-gray-400"
-                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
-                    }`}
-                  >
-                    {markedCount} {markedCount === 1 ? "marcada" : "marcadas"}
-                  </span>
-                </div>
-                <ul className="divide-y divide-slate-100 dark:divide-gray-700">
+                <div className="cad-day" key={date}>
+                  <div className="cad-day-head">
+                    <div>
+                      <div className="cad-day-wd">{wd}</div>
+                      <div className="cad-day-dt">{dt}</div>
+                    </div>
+                    <div className="cad-count">
+                      {markedCount} {markedCount === 1 ? "marcada" : "marcadas"}
+                    </div>
+                  </div>
+
                   {MEAL_TYPES.filter((mt) =>
                     daySlots.some((s) => s.meal_type === mt)
                   ).map((mt) => {
                     const slot = daySlots.find((s) => s.meal_type === mt)!;
-                    // "todos" estrito (1º/2º) = obrigatória sem desmarcar.
-                    // "todos" opt-out (3º/4º) = pré-marcada, mas pode desmarcar.
+                    // "todos" estrito (1º/2º) = obrigatória, não clicável.
                     const strict = slot.access === "todos" && !optOut;
-                    const optOutMeal = slot.access === "todos" && optOut;
-                    return (
-                      <li
-                        key={slot.id}
-                        className={`flex items-center gap-2.5 px-3 py-2 transition-colors ${
-                          slot.locked
-                            ? "bg-slate-50 dark:bg-gray-700/30"
-                            : "hover:bg-slate-50/60 dark:hover:bg-gray-700/40"
-                        }`}
-                      >
-                        <span
-                          className={`shrink-0 text-base leading-none ${
-                            slot.locked ? "opacity-50 grayscale" : ""
-                          }`}
-                          aria-hidden
-                        >
-                          {slot.locked ? "🔒" : MEAL_ICONS[mt]}
-                        </span>
+                    const clickable =
+                      !slot.locked && (slot.access === "opcional" || optOut);
 
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className={`truncate text-sm font-medium leading-tight ${
-                              slot.locked
-                                ? "text-slate-400 dark:text-gray-500"
-                                : "text-slate-700 dark:text-gray-200"
-                            }`}
-                          >
-                            {MEAL_LABELS[mt]}
-                          </p>
-                          {slot.locked ? (
-                            <p className="text-[11px] leading-tight text-slate-400">
-                              Bloqueado · {slot.marked ? "Sim" : "Não"}
-                            </p>
-                          ) : optOutMeal ? (
-                            <p
-                              className={`text-[11px] leading-tight ${
-                                slot.marked
-                                  ? "text-emerald-600"
-                                  : "font-medium text-amber-600"
-                              }`}
-                            >
-                              {slot.marked
-                                ? "Obrigatória (pode desmarcar)"
-                                : "Desmarcou — não vai comer"}
-                            </p>
-                          ) : null}
-                        </div>
+                    const stateClass = slot.locked
+                      ? "blocked"
+                      : strict
+                      ? "lock"
+                      : slot.marked
+                      ? "on"
+                      : "off";
 
-                        {strict ? (
-                          <span className="chip shrink-0 bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
-                            Obrigatória
+                    const right = slot.locked ? (
+                      <span className="cad-pill-muted">
+                        🔒 {slot.marked ? "Sim" : "Não"}
+                      </span>
+                    ) : strict ? (
+                      <span className="cad-pill-req">Obrigatória</span>
+                    ) : slot.marked ? (
+                      <span className="cad-pill-box">✓</span>
+                    ) : (
+                      <span className="cad-pill-box" />
+                    );
+
+                    const inner = (
+                      <>
+                        <span className="cad-meal-left">
+                          <span className="cad-meal-ic" aria-hidden>
+                            {MEAL_ICONS[mt]}
                           </span>
-                        ) : (
-                          <Toggle
-                            on={slot.marked}
-                            disabled={slot.locked || pending.has(slot.id)}
-                            onChange={(next) => toggle(slot, next)}
-                            label={`${MEAL_LABELS[mt]} ${formatLongDate(date)}`}
-                          />
-                        )}
-                      </li>
+                          <span className="cad-meal-nm">{MEAL_LABELS[mt]}</span>
+                        </span>
+                        {right}
+                      </>
+                    );
+
+                    return clickable ? (
+                      <button
+                        key={slot.id}
+                        type="button"
+                        className={`cad-meal ${stateClass}`}
+                        disabled={pending.has(slot.id)}
+                        onClick={() => toggle(slot, !slot.marked)}
+                      >
+                        {inner}
+                      </button>
+                    ) : (
+                      <div key={slot.id} className={`cad-meal ${stateClass}`}>
+                        {inner}
+                      </div>
                     );
                   })}
-                </ul>
-              </section>
+                </div>
               );
             })}
           </div>
         )}
 
-        <div className="pt-2">
-          <ChangePassword />
-        </div>
+        <div className="cad-foot">REFEIÇÕES AFA</div>
+      </div>
 
-        <p className="pt-2 text-center text-xs text-slate-400 dark:text-gray-600">
-          Refeições AFA
-        </p>
-      </main>
-
-      {/* QR code: botão flutuante + modal em tela cheia */}
+      {/* QR: botão flutuante + modal */}
       <MyQrCode token={qrToken} name={user.name} number={user.number} />
+
+      {/* Trocar senha (sheet escuro) */}
+      {pwOpen && <ChangePasswordSheet onClose={() => setPwOpen(false)} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function ChangePasswordSheet({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (next.length < 6) {
+      toast.error("A nova senha deve ter no mínimo 6 caracteres.");
+      return;
+    }
+    if (next !== confirm) {
+      toast.error("A confirmação não corresponde à nova senha.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await apiFetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Erro ao trocar a senha.");
+      } else {
+        toast.success("Senha alterada com sucesso!");
+        onClose();
+      }
+    } catch {
+      toast.error("Erro de conexão.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="cad-overlay" onClick={onClose}>
+      <form
+        className="cad-sheet"
+        style={{ width: 360, maxWidth: "calc(100vw - 48px)", padding: 26 }}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+      >
+        <div
+          className="flex items-center justify-between"
+          style={{ marginBottom: 18 }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--font-sora), Sora, sans-serif",
+              fontWeight: 600,
+              fontSize: 16,
+            }}
+          >
+            Trocar senha
+          </span>
+          <button
+            type="button"
+            className="cad-x"
+            onClick={onClose}
+            aria-label="Fechar"
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <input
+            className="cad-field"
+            type="password"
+            placeholder="Senha atual"
+            autoComplete="current-password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            required
+          />
+          <input
+            className="cad-field"
+            type="password"
+            placeholder="Nova senha (mín. 6 caracteres)"
+            autoComplete="new-password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            required
+          />
+          <input
+            className="cad-field"
+            type="password"
+            placeholder="Confirmar nova senha"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+          />
+          <button className="cad-submit" type="submit" disabled={loading}>
+            {loading ? "Salvando…" : "Salvar nova senha"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

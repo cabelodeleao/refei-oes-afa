@@ -107,3 +107,431 @@ body {
 .toggle[data-on="false"] .toggle-knob {
   @apply translate-x-0;
 }
+
+/* ===================================================================== */
+/* Página do cadete (/cadete) — tema escuro do design de referência.      */
+/* Cores/medidas replicadas fielmente do protótipo.                       */
+/* ===================================================================== */
+.cad-root {
+  min-height: 100dvh;
+  color: #e8edf4;
+  font-family: var(--font-inter), "Inter", system-ui, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(56, 128, 255, 0.12), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(20, 180, 140, 0.1), transparent 55%),
+    #0b0f17;
+  background-attachment: fixed;
+}
+.cad-wrap {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 20px 120px;
+}
+.cad-max {
+  width: 100%;
+  max-width: 1040px;
+}
+.cad-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.cad-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #2563eb, #0ea5e9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sora), "Sora", sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.35);
+  flex-shrink: 0;
+}
+.cad-name {
+  font-family: var(--font-sora), "Sora", sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 0.3px;
+}
+.cad-meta {
+  font-size: 12.5px;
+  color: #8b97a8;
+  margin-top: 2px;
+}
+.cad-btn {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cfd8e6;
+  font-weight: 500;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.cad-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.cad-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cad-btn-out {
+  border-color: rgba(255, 90, 90, 0.25);
+  background: rgba(255, 90, 90, 0.08);
+  color: #ff9a9a;
+  font-weight: 600;
+}
+.cad-btn-out:hover {
+  background: rgba(255, 90, 90, 0.16);
+}
+
+/* Cardápio: imagem inteira visível, clicável p/ ampliar */
+.cad-menu {
+  margin-top: 24px;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: zoom-in;
+  display: block;
+  padding: 0;
+}
+.cad-menu img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.cad-sect {
+  margin-top: 34px;
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cad-sect h2 {
+  font-family: var(--font-sora), "Sora", sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 2.5px;
+  color: #9aa6b7;
+  text-transform: uppercase;
+  margin: 0;
+}
+.cad-sect .cad-hint {
+  font-size: 12.5px;
+  color: #6b7688;
+}
+
+.cad-grid {
+  margin-top: 16px;
+  width: 100%;
+  display: grid;
+  /* 300px no desktop (vários dias lado a lado); encolhe em telas estreitas
+     para não estourar a largura no celular. */
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 16px;
+}
+.cad-day {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  padding: 18px 18px 12px;
+  animation: cadFadeUp 0.4s ease both;
+}
+.cad-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.cad-day-wd {
+  font-family: var(--font-sora), "Sora", sans-serif;
+  font-weight: 600;
+  font-size: 15.5px;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+.cad-day-dt {
+  font-size: 12px;
+  color: #8b97a8;
+  margin-top: 2px;
+}
+.cad-count {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #5fd0a0;
+  background: rgba(20, 180, 140, 0.1);
+  border: 1px solid rgba(20, 180, 140, 0.22);
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.cad-meal {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 12px;
+  margin: 6px 0;
+  border-radius: 13px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+  background: transparent;
+  color: inherit;
+}
+.cad-meal-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.cad-meal-ic {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.cad-meal-nm {
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.cad-meal.off {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.06);
+  color: #aab4c4;
+}
+.cad-meal.on {
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(56, 128, 255, 0.45);
+  color: #fff;
+}
+.cad-meal.lock {
+  background: rgba(20, 180, 140, 0.07);
+  border-color: rgba(20, 180, 140, 0.18);
+  color: #e8edf4;
+  cursor: default;
+}
+.cad-meal.blocked {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.06);
+  color: #7c8696;
+  cursor: not-allowed;
+}
+.cad-meal.off .cad-meal-ic {
+  background: rgba(255, 255, 255, 0.05);
+}
+.cad-meal.on .cad-meal-ic {
+  background: rgba(56, 128, 255, 0.22);
+}
+.cad-meal.lock .cad-meal-ic {
+  background: rgba(20, 180, 140, 0.14);
+}
+.cad-meal.blocked .cad-meal-ic {
+  background: rgba(255, 255, 255, 0.04);
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+.cad-pill-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.cad-meal.off .cad-pill-box {
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+}
+.cad-meal.on .cad-pill-box {
+  background: #3b82f6;
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cad-pill-req {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #5fd0a0;
+  white-space: nowrap;
+}
+.cad-pill-muted {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #7c8696;
+  white-space: nowrap;
+}
+.cad-foot {
+  margin-top: 46px;
+  font-size: 12px;
+  color: #4d5666;
+  letter-spacing: 1px;
+}
+
+.cad-fab {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  height: 56px;
+  padding: 0 24px 0 20px;
+  border-radius: 18px;
+  border: none;
+  background: linear-gradient(145deg, #2563eb, #0ea5e9);
+  color: #fff;
+  font-family: var(--font-sora), "Sora", sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.45);
+  z-index: 40;
+  transition: transform 0.15s;
+}
+.cad-fab:hover {
+  transform: translateY(-2px);
+}
+
+.cad-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 9, 15, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  animation: cadOverlayIn 0.2s ease;
+  padding: 24px;
+}
+.cad-sheet {
+  background: linear-gradient(160deg, #141b27, #0d121c);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 24px;
+  animation: cadSheetIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.cad-qr-sheet {
+  width: 340px;
+  max-width: calc(100vw - 48px);
+  padding: 28px;
+  text-align: center;
+}
+.cad-qr-frame {
+  margin: 22px auto 0;
+  width: 212px;
+  height: 212px;
+  max-width: 100%;
+  background: #fff;
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cad-x {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cfd8e6;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.cad-field {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e8edf4;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cad-field::placeholder {
+  color: #6b7688;
+}
+.cad-field:focus {
+  border-color: rgba(56, 128, 255, 0.6);
+  background: rgba(255, 255, 255, 0.06);
+}
+.cad-submit {
+  width: 100%;
+  height: 46px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(145deg, #2563eb, #0ea5e9);
+  color: #fff;
+  font-family: var(--font-sora), "Sora", sans-serif;
+  font-weight: 600;
+  font-size: 14.5px;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.cad-submit:hover {
+  filter: brightness(1.08);
+}
+.cad-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes cadFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes cadOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cadSheetIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
