@@ -210,10 +210,10 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
   return (
     <div className="space-y-4">
       {/* Desktop: form (290px, esq.) | tabela do tamanho do conteúdo (dir.).
-          A 2ª coluna é "auto", então o bloco fica compacto (sem esticar); o
-          conjunto é centralizado (justify-center), deixando margem equilibrada
-          dos dois lados. Uma coluna no mobile. */}
-      <div className="grid items-start gap-4 lg:grid-cols-[290px_auto] lg:justify-center">
+          A 2ª coluna é "auto", então o bloco fica compacto (sem esticar) e
+          alinhado à esquerda do container centralizado da página — assim casa
+          com o header. Uma coluna no mobile. */}
+      <div className="grid items-start gap-4 lg:grid-cols-[290px_auto] lg:justify-start">
         <CreatePanel
           defaultFrom={from}
           defaultTo={to}

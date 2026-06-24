@@ -97,14 +97,17 @@ export default function AdminClient({ user }: Props) {
     }
   }, [from, to]);
 
-  // A aba "Gerenciar Refeições" usa a largura total da tela (grid largo de
-  // dias x refeições). As demais ficam centralizadas e legíveis (max-w-5xl).
-  const wide = tab === "gerenciar";
+  // Container centralizado compartilhado: o conteúdo das abas e o conteúdo
+  // interno do header (título, abas, botões) usam a MESMA largura máxima e
+  // ficam alinhados. A faixa azul do header continua full width; só o miolo
+  // é centralizado. Largura escolhida p/ comportar o bloco da aba Gerenciar
+  // Refeições (form 290px + grade compacta) sem esticar as demais.
+  const container = "mx-auto w-full max-w-[1100px] px-4 sm:px-6";
 
   return (
     <div className="min-h-[100dvh]">
       <header className="sticky top-0 z-20 bg-gradient-to-r from-navy-900 to-navy-700 text-white shadow-md">
-        <div className={wide ? "w-full px-4 sm:px-6" : "mx-auto max-w-5xl px-4"}>
+        <div className={container}>
           <div className="flex items-center justify-between gap-3 py-3.5">
             <div className="min-w-0">
               <p className="truncate text-base font-bold leading-tight">
@@ -155,13 +158,7 @@ export default function AdminClient({ user }: Props) {
         </div>
       </header>
 
-      <main
-        className={
-          wide
-            ? "w-full px-4 py-5 sm:px-6"
-            : "mx-auto max-w-5xl px-4 py-5"
-        }
-      >
+      <main className={`${container} py-5`}>
         {tab === "gerenciar" ? (
           <ManageMeals from={from} to={to} setFrom={setFrom} setTo={setTo} />
         ) : tab === "resumo" ? (
