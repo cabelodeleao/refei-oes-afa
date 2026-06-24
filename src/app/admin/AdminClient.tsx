@@ -97,10 +97,14 @@ export default function AdminClient({ user }: Props) {
     }
   }, [from, to]);
 
+  // A aba "Gerenciar Refeições" usa a largura total da tela (grid largo de
+  // dias x refeições). As demais ficam centralizadas e legíveis (max-w-5xl).
+  const wide = tab === "gerenciar";
+
   return (
     <div className="min-h-[100dvh]">
       <header className="sticky top-0 z-20 bg-gradient-to-r from-navy-900 to-navy-700 text-white shadow-md">
-        <div className="mx-auto max-w-5xl px-4">
+        <div className={wide ? "w-full px-4 sm:px-6" : "mx-auto max-w-5xl px-4"}>
           <div className="flex items-center justify-between gap-3 py-3.5">
             <div className="min-w-0">
               <p className="truncate text-base font-bold leading-tight">
@@ -151,7 +155,13 @@ export default function AdminClient({ user }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-5">
+      <main
+        className={
+          wide
+            ? "w-full px-4 py-5 sm:px-6"
+            : "mx-auto max-w-5xl px-4 py-5"
+        }
+      >
         {tab === "gerenciar" ? (
           <ManageMeals from={from} to={to} setFrom={setFrom} setTo={setTo} />
         ) : tab === "resumo" ? (

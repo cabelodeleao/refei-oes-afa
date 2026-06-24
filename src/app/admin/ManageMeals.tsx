@@ -95,13 +95,14 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     existing?: Slot;
   } | null>(null);
 
-  // Barra "Criar refeições" recolhível. Default recolhida: assim o grid
-  // "Refeições criadas" ocupa a largura toda (texto por extenso, sem corte).
-  // A preferência é lembrada no localStorage.
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Barra "Criar refeições" no formato normal (expandida) por padrão. Pode ser
+  // recolhida (botão «) e a preferência é lembrada no localStorage. Como agora
+  // o painel usa a largura total da tela, o grid já tem espaço de sobra com a
+  // barra aberta.
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   useEffect(() => {
     try {
-      const v = localStorage.getItem("manageMeals.sidebarOpen");
+      const v = localStorage.getItem("manageMeals.createOpen");
       if (v !== null) setSidebarOpen(v === "1");
     } catch {
       /* localStorage indisponível: mantém o default */
@@ -111,7 +112,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     setSidebarOpen((o) => {
       const n = !o;
       try {
-        localStorage.setItem("manageMeals.sidebarOpen", n ? "1" : "0");
+        localStorage.setItem("manageMeals.createOpen", n ? "1" : "0");
       } catch {
         /* ignora */
       }
@@ -414,7 +415,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
               cabem na tela sem scroll horizontal; minmax(0,1fr) deixa encolher. */}
           <div className="hidden px-4 py-4 lg:block">
             {/* Cabeçalho de colunas */}
-            <div className="grid grid-cols-[64px_repeat(4,minmax(0,1fr))] gap-2 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
+            <div className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))] gap-2.5 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
               <div>Dia</div>
               {MEAL_TYPES.map((mt) => (
                 <div key={mt}>{MEAL_SHORT[mt]}</div>
@@ -427,7 +428,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
                 return (
                   <div
                     key={d}
-                    className="grid grid-cols-[64px_repeat(4,minmax(0,1fr))] gap-2"
+                    className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))] gap-2.5"
                   >
                     <div className="flex flex-col justify-center gap-1 px-1">
                       <DaySelectCheckbox
@@ -629,13 +630,12 @@ const STATE_ROW: Record<AccessState, string> = {
 function SquadronRow({ sq, state }: { sq: number; state: AccessState }) {
   return (
     <span
-      className={`flex items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold ring-1 ring-inset ${STATE_ROW[state]}`}
+      className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${STATE_ROW[state]}`}
       title={`${sq}º Esquadrão: ${STATE_PILL[state].label}`}
     >
-      {/* Largura fixa pequena para o rótulo: estados ficam alinhados entre as
-          linhas e logo ao lado do esquadrão (sem o vão do justify-between). */}
-      <span className="w-10 shrink-0 opacity-90">{sq}º Esq</span>
-      <span className="truncate">{STATE_PILL[state].label}</span>
+      {/* Preenche a largura da célula: esquadrão à esquerda, estado à direita. */}
+      <span className="opacity-90">{sq}º Esq</span>
+      <span>{STATE_PILL[state].label}</span>
     </span>
   );
 }
@@ -705,7 +705,7 @@ function DesktopCell({
   }
   return (
     <div
-      className={`flex h-full min-w-0 flex-col gap-1.5 rounded-xl border p-2 transition ${
+      className={`flex h-full min-w-0 flex-col gap-2 rounded-xl border p-2.5 transition ${
         slot.locked
           ? "border-slate-200 bg-slate-50 dark:border-gray-600 dark:bg-gray-700/40"
           : "border-slate-200 bg-white dark:border-gray-600 dark:bg-gray-700/60"
