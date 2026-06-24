@@ -40,16 +40,14 @@ export default function CadeteClient({ user, qrToken }: Props) {
   const [pwOpen, setPwOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Indicador discreto de salvamento em lote (debounce).
-  const [saveStatus, setSaveStatus] = useState<
-    "idle" | "pending" | "saving" | "saved"
-  >("idle");
-
-  // Alterações pendentes (slot_id -> valor desejado) acumuladas entre cliques.
-  // Gravamos tudo de uma vez 2s após o último clique (debounce), evitando uma
-  // chuva de avisos quando o cadete marca várias refeições em sequência.
-  const dirtyRef = useRef<Map<string, boolean>>(new Map());
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  // Indicador discreto de salvamento. O SAVE é imediato a cada clique; só o
+  // TOAST de sucesso é agrupado (debounce 2s) para não pipocar a cada marcação.
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
+    "idle"
+  );
+  const inFlightRef = useRef(0); // saves em andamento
+  const hadErrorRef = useRef(false); // houve erro desde o último toast?
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
   const savedTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -67,83 +65,69 @@ export default function CadeteClient({ user, qrToken }: Props) {
     })();
   }, []);
 
-  // Grava todas as alterações pendentes de uma vez. Um único toast no fim.
-  const flush = useCallback(async () => {
-    clearTimeout(saveTimer.current);
-    const changes = Array.from(dirtyRef.current.entries());
-    if (changes.length === 0) return;
-    dirtyRef.current.clear();
-    setSaveStatus("saving");
-    try {
-      const results = await Promise.all(
-        changes.map(([slot_id, marked]) =>
-          apiFetch("/api/marks", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slot_id, marked }),
-          })
-        )
-      );
-      if (results.every((r) => r.ok)) {
-        clearTimeout(savedTimer.current);
-        setSaveStatus("saved");
-        toast.success("Refeições salvas com sucesso! ✓");
-        savedTimer.current = setTimeout(() => setSaveStatus("idle"), 2500);
-      } else {
-        // Alguma falhou: ressincroniza com o servidor e avisa.
-        setSaveStatus("idle");
-        toast.error("Não foi possível salvar tudo. Recarregando…");
-        try {
-          const res = await apiFetch("/api/slots");
-          const data = await res.json();
-          if (res.ok) setSlots(data.slots ?? []);
-        } catch {
-          /* mantém o estado atual */
-        }
-      }
-    } catch {
-      setSaveStatus("idle");
-      toast.error("Erro de conexão ao salvar.");
-    }
+  useEffect(
+    () => () => {
+      clearTimeout(toastTimer.current);
+      clearTimeout(savedTimer.current);
+    },
+    []
+  );
+
+  // (Re)agenda o único toast de sucesso: 2s após o último save bem-sucedido.
+  const scheduleSuccessToast = useCallback(() => {
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => {
+      if (!hadErrorRef.current) toast.success("Refeições salvas com sucesso! ✓");
+      hadErrorRef.current = false;
+    }, 2000);
   }, [toast]);
 
-  // Agenda (ou reagenda) o salvamento em lote 2s após o último clique.
-  const scheduleSave = useCallback(() => {
-    setSaveStatus("pending");
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      void flush();
-    }, 2000);
-  }, [flush]);
-
-  // Garante que nada se perca ao sair: grava na desmontagem e no beforeunload.
-  // No unload usamos keepalive para a requisição sobreviver à navegação.
-  useEffect(() => {
-    function flushOnUnload() {
-      const changes = Array.from(dirtyRef.current.entries());
-      if (changes.length === 0) return;
-      dirtyRef.current.clear();
-      for (const [slot_id, marked] of changes) {
-        try {
-          fetch("/api/marks", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slot_id, marked }),
-            keepalive: true,
-          });
-        } catch {
-          /* best-effort */
+  // Salva UMA refeição IMEDIATAMENTE. A UI já foi atualizada de forma otimista
+  // por quem chamou; aqui persistimos e tratamos erro/indicador. Saves
+  // concorrentes não se cancelam — só o toast de sucesso é agrupado.
+  const saveMark = useCallback(
+    async (slotId: string, marked: boolean) => {
+      inFlightRef.current += 1;
+      clearTimeout(savedTimer.current);
+      setSaveStatus("saving");
+      try {
+        const res = await apiFetch("/api/marks", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slot_id: slotId, marked }),
+        });
+        if (res.ok) {
+          scheduleSuccessToast();
+        } else {
+          // Erro aparece na hora (não espera o debounce) e desfaz o otimismo.
+          hadErrorRef.current = true;
+          clearTimeout(toastTimer.current);
+          setSlots((prev) =>
+            prev.map((s) => (s.id === slotId ? { ...s, marked: !marked } : s))
+          );
+          toast.error("Não foi possível salvar uma refeição. Tente novamente.");
+        }
+      } catch {
+        hadErrorRef.current = true;
+        clearTimeout(toastTimer.current);
+        setSlots((prev) =>
+          prev.map((s) => (s.id === slotId ? { ...s, marked: !marked } : s))
+        );
+        toast.error("Erro de conexão ao salvar.");
+      } finally {
+        inFlightRef.current -= 1;
+        if (inFlightRef.current === 0) {
+          if (hadErrorRef.current) {
+            setSaveStatus("idle");
+          } else {
+            setSaveStatus("saved");
+            savedTimer.current = setTimeout(() => setSaveStatus("idle"), 2500);
+          }
         }
       }
-    }
-    window.addEventListener("beforeunload", flushOnUnload);
-    return () => {
-      window.removeEventListener("beforeunload", flushOnUnload);
-      clearTimeout(saveTimer.current);
-      clearTimeout(savedTimer.current);
-      flushOnUnload();
-    };
-  }, []);
+    },
+    [scheduleSuccessToast, toast]
+  );
 
   // Agrupa por data, mantendo ordem cronológica.
   const days = useMemo(() => {
@@ -167,29 +151,26 @@ export default function CadeteClient({ user, qrToken }: Props) {
     return optOut; // access === "todos"
   }
 
-  // Marca/desmarca uma refeição: atualização otimista + agenda gravação.
+  // Marca/desmarca uma refeição: UI otimista + SAVE imediato.
   function applyMark(slot: Slot, next: boolean) {
     if (!canToggle(slot) || slot.marked === next) return;
     setSlots((prev) =>
       prev.map((s) => (s.id === slot.id ? { ...s, marked: next } : s))
     );
-    dirtyRef.current.set(slot.id, next);
-    scheduleSave();
+    void saveMark(slot.id, next);
   }
 
   // "Marcar todas": aplica a todas as refeições do dia que o cadete PODE alterar
-  // (opcionais sempre; obrigatórias só p/ 3º/4º; nunca as bloqueadas).
+  // (opcionais sempre; obrigatórias só p/ 3º/4º; nunca as bloqueadas). Cada uma
+  // é salva imediatamente; o toast único sai 2s após o último save.
   function toggleAllDay(daySlots: Slot[], checked: boolean) {
-    const editable = daySlots.filter(canToggle);
-    if (editable.length === 0) return;
-    const ids = new Set(editable.map((s) => s.id));
+    const changed = daySlots.filter((s) => canToggle(s) && s.marked !== checked);
+    if (changed.length === 0) return;
+    const ids = new Set(changed.map((s) => s.id));
     setSlots((prev) =>
       prev.map((s) => (ids.has(s.id) ? { ...s, marked: checked } : s))
     );
-    for (const s of editable) {
-      if (s.marked !== checked) dirtyRef.current.set(s.id, checked);
-    }
-    if (dirtyRef.current.size > 0) scheduleSave();
+    for (const s of changed) void saveMark(s.id, checked);
   }
 
   async function logout() {
@@ -238,8 +219,6 @@ export default function CadeteClient({ user, qrToken }: Props) {
         <div className="cad-max cad-sect">
           <h2>Suas Refeições</h2>
           {saveStatus === "saving" ? (
-            <div className="cad-save cad-save-busy">Salvando…</div>
-          ) : saveStatus === "pending" ? (
             <div className="cad-save cad-save-busy">Salvando…</div>
           ) : saveStatus === "saved" ? (
             <div className="cad-save cad-save-ok">Salvo ✓</div>
