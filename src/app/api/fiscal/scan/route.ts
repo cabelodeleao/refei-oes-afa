@@ -11,6 +11,27 @@ import {
 export const runtime = "nodejs";
 
 type ScanStatus = "autorizado" | "negado" | "ja_registrado" | "invalido";
+type ScanResult = "autorizado" | "nao_marcou" | "duplicado";
+
+// Registra a tentativa de leitura no log completo (scan_attempts). Best-effort:
+// uma falha no log nunca deve impedir a resposta visual ao fiscal.
+async function logAttempt(
+  cadetId: string,
+  slotId: string,
+  fiscalId: string | undefined,
+  result: ScanResult
+) {
+  try {
+    await supabaseAdmin.from("scan_attempts").insert({
+      cadet_id: cadetId,
+      slot_id: slotId,
+      fiscal_id: fiscalId ?? null,
+      result,
+    });
+  } catch {
+    /* log é best-effort */
+  }
+}
 
 // POST /api/fiscal/scan  (fiscal/admin)
 // Body: { qr_token, slot_id }
@@ -118,6 +139,7 @@ export async function POST(req: Request) {
   }
 
   if (!authorized) {
+    await logAttempt(cadet.id, slotId, session.sub, "nao_marcou");
     return NextResponse.json({
       status: "negado" as ScanStatus,
       cadet: cadetInfo,
@@ -138,6 +160,7 @@ export async function POST(req: Request) {
   }
 
   if (existing) {
+    await logAttempt(cadet.id, slotId, session.sub, "duplicado");
     return NextResponse.json({
       status: "ja_registrado" as ScanStatus,
       cadet: cadetInfo,
@@ -154,6 +177,7 @@ export async function POST(req: Request) {
   if (insErr) {
     // Corrida: outra leitura registrou no mesmo instante (viola o UNIQUE).
     if (insErr.code === "23505") {
+      await logAttempt(cadet.id, slotId, session.sub, "duplicado");
       const { data: again } = await supabaseAdmin
         .from("meal_entries")
         .select("entered_at")
@@ -168,6 +192,8 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ error: "Erro ao registrar entrada" }, { status: 500 });
   }
+
+  await logAttempt(cadet.id, slotId, session.sub, "autorizado");
 
   return NextResponse.json({
     status: "autorizado" as ScanStatus,

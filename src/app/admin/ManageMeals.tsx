@@ -46,10 +46,15 @@ function hasAnyAccess(m: AccessMap): boolean {
   return ALL_SQUADRONS.some((sq) => m[sq] !== "ninguem");
 }
 
-const STATE_CHIP: Record<AccessState, string> = {
-  opcional: "bg-sky-500 text-white",
-  todos: "bg-emerald-500 text-white",
-  ninguem: "bg-slate-200 text-slate-400",
+// Estilo + rótulo curto de cada estado, autoexplicativo (não precisa de legenda):
+//   Opcional -> azul "Opc" · Todos/obrigatório -> verde "Obr" · Ninguém -> cinza "—"
+const STATE_PILL: Record<AccessState, { cls: string; abbr: string }> = {
+  opcional: { cls: "bg-sky-500 text-white", abbr: "Opc" },
+  todos: { cls: "bg-emerald-600 text-white", abbr: "Obr" },
+  ninguem: {
+    cls: "bg-slate-200 text-slate-500 dark:bg-gray-600 dark:text-gray-300",
+    abbr: "—",
+  },
 };
 
 interface Props {
@@ -165,164 +170,165 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      <CreatePanel
-        defaultFrom={from}
-        defaultTo={to}
-        existing={slots}
-        onCreated={(msg, ok = true) => {
-          if (ok) {
-            toast.success(msg);
-            load();
-          } else {
-            toast.error(msg);
-          }
-        }}
-      />
+    <div className="space-y-4">
+      {/* Duas colunas no desktop: criar (esq.) | refeições criadas (dir.).
+          Uma coluna no mobile. */}
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <CreatePanel
+          defaultFrom={from}
+          defaultTo={to}
+          existing={slots}
+          onCreated={(msg, ok = true) => {
+            if (ok) {
+              toast.success(msg);
+              load();
+            } else {
+              toast.error(msg);
+            }
+          }}
+        />
 
-      {/* Grid de slots existentes */}
-      <section className="card overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-gray-700 px-5 py-4">
-          <div>
-            <h2 className="font-bold text-navy-800 dark:text-gray-100">Refeições criadas</h2>
-            <p className="text-xs text-slate-500">
-              {formatShortDate(from)} a {formatShortDate(to)}
-            </p>
+        {/* Grid de slots existentes */}
+        <section className="card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-gray-700">
+            <div>
+              <h2 className="font-bold text-navy-800 dark:text-gray-100">
+                Refeições criadas
+              </h2>
+              <p className="text-xs text-slate-500">
+                {formatShortDate(from)} a {formatShortDate(to)}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <button className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => shiftWeek(-1)}>
+                ←
+              </button>
+              <button
+                className="btn-ghost px-2.5 py-1.5 text-xs"
+                onClick={() => {
+                  const w = startOfWeek(new Date());
+                  setFrom(toISODate(w));
+                  setTo(toISODate(addDays(w, 6)));
+                  setSelected(new Set());
+                }}
+              >
+                Hoje
+              </button>
+              <button className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => shiftWeek(1)}>
+                →
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button className="btn-secondary" onClick={() => shiftWeek(-1)}>
-              ← Semana
+
+          {/* Filtro manual de período */}
+          <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-slate-50/50 px-4 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-800/40">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-gray-400">De</span>
+              <input
+                type="date"
+                className="rounded-lg border border-slate-300 px-2 py-1 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Até</span>
+              <input
+                type="date"
+                className="rounded-lg border border-slate-300 px-2 py-1 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </label>
+          </div>
+
+          {/* Ações em lote (sem legenda: os badges já são autoexplicativos) */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5 dark:border-gray-700">
+            <span className="text-xs text-slate-500 dark:text-gray-400">
+              {selected.size} selec.
+            </span>
+            <button
+              className="btn-secondary px-2.5 py-1.5 text-xs"
+              disabled={selected.size === 0}
+              onClick={() => bulkLock(true)}
+            >
+              🔒 Bloquear
             </button>
             <button
-              className="btn-ghost"
-              onClick={() => {
-                const w = startOfWeek(new Date());
-                setFrom(toISODate(w));
-                setTo(toISODate(addDays(w, 6)));
-                setSelected(new Set());
-              }}
+              className="btn-secondary px-2.5 py-1.5 text-xs"
+              disabled={selected.size === 0}
+              onClick={() => bulkLock(false)}
             >
-              Hoje
+              🔓 Desbloquear
             </button>
-            <button className="btn-secondary" onClick={() => shiftWeek(1)}>
-              Semana →
+            <button
+              className="btn-ghost px-2.5 py-1.5 text-xs text-red-600"
+              disabled={selected.size === 0}
+              onClick={bulkDelete}
+            >
+              Remover
             </button>
           </div>
-        </div>
 
-        {/* Filtro manual de período */}
-        <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 dark:border-gray-700 bg-slate-50/50 px-5 py-3 text-sm dark:bg-gray-800/40">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-500 dark:text-gray-400">De</span>
-            <input
-              type="date"
-              className="rounded-lg border border-slate-300 px-2 py-1.5 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Até</span>
-            <input
-              type="date"
-              className="rounded-lg border border-slate-300 px-2 py-1.5 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </label>
-        </div>
-
-        {/* Ações em lote + legenda */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-gray-700 px-5 py-3">
-          <span className="text-sm text-slate-500 dark:text-gray-400">
-            {selected.size} selecionada(s)
-          </span>
-          <button
-            className="btn-secondary"
-            disabled={selected.size === 0}
-            onClick={() => bulkLock(true)}
-          >
-            🔒 Bloquear
-          </button>
-          <button
-            className="btn-secondary"
-            disabled={selected.size === 0}
-            onClick={() => bulkLock(false)}
-          >
-            🔓 Desbloquear
-          </button>
-          <button
-            className="btn-ghost text-red-600"
-            disabled={selected.size === 0}
-            onClick={bulkDelete}
-          >
-            Remover
-          </button>
-          <div className="ml-auto flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-            <Legend chip="bg-sky-500" label="Opcional" />
-            <Legend chip="bg-emerald-500" label="Todos" />
-            <Legend chip="bg-slate-300" label="Ninguém" />
-          </div>
-        </div>
-
-        {/* Tabela grid */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse text-sm">
-            <thead>
-              <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-gray-700/40 dark:text-gray-400">
-                <th className="px-4 py-2.5 font-semibold">Dia</th>
-                {MEAL_TYPES.map((mt) => (
-                  <th key={mt} className="px-3 py-2.5 font-semibold">
-                    {MEAL_SHORT[mt]}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
-              {days.map((d) => (
-                <tr key={d} className="align-top">
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <div className="font-semibold text-navy-800 dark:text-gray-100">
-                      {formatShortDate(d)}
-                    </div>
-                    <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
-                      {weekdayShort(d)}
-                    </div>
-                  </td>
-                  {MEAL_TYPES.map((mt) => {
-                    const slot = slotMap.get(`${d}|${mt}`);
-                    return (
-                      <td key={mt} className="px-3 py-3">
-                        <GridCell
-                          slot={slot}
-                          checked={slot ? selected.has(slot.id) : false}
-                          onToggleSelect={() => slot && toggleSelect(slot.id)}
-                          onClick={() =>
-                            setEditing({
-                              date: d,
-                              meal: mt,
-                              access: slot
-                                ? fullAccess(slot.squadrons)
-                                : uniformAccess("opcional"),
-                              existing: slot,
-                            })
-                          }
-                        />
-                      </td>
-                    );
-                  })}
+          {/* Tabela grid */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-gray-700/40 dark:text-gray-400">
+                  <th className="px-3 py-2 font-semibold">Dia</th>
+                  {MEAL_TYPES.map((mt) => (
+                    <th key={mt} className="px-2 py-2 font-semibold">
+                      {MEAL_SHORT[mt]}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {loading && (
-          <div className="px-5 py-4 text-center text-sm text-slate-400">
-            Carregando…
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
+                {days.map((d) => (
+                  <tr key={d} className="align-top">
+                    <td className="whitespace-nowrap px-3 py-2">
+                      <div className="text-sm font-semibold text-navy-800 dark:text-gray-100">
+                        {formatShortDate(d)}
+                      </div>
+                      <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
+                        {weekdayShort(d)}
+                      </div>
+                    </td>
+                    {MEAL_TYPES.map((mt) => {
+                      const slot = slotMap.get(`${d}|${mt}`);
+                      return (
+                        <td key={mt} className="px-2 py-2">
+                          <GridCell
+                            slot={slot}
+                            checked={slot ? selected.has(slot.id) : false}
+                            onToggleSelect={() => slot && toggleSelect(slot.id)}
+                            onClick={() =>
+                              setEditing({
+                                date: d,
+                                meal: mt,
+                                access: slot
+                                  ? fullAccess(slot.squadrons)
+                                  : uniformAccess("opcional"),
+                                existing: slot,
+                              })
+                            }
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
-      </section>
+
+          {loading && (
+            <div className="px-5 py-4 text-center text-sm text-slate-400">
+              Carregando…
+            </div>
+          )}
+        </section>
+      </div>
 
       {editing && (
         <EditModal
@@ -338,11 +344,16 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
 
 // ---------------------------------------------------------------------------
 
-function Legend({ chip, label }: { chip: string; label: string }) {
+// Badge autoexplicativo de um esquadrão: número + estado, com cor reforçando.
+function SquadronBadge({ sq, state }: { sq: number; state: AccessState }) {
+  const p = STATE_PILL[state];
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`inline-block h-3 w-3 rounded ${chip}`} />
-      {label}
+    <span
+      className={`flex items-center justify-center gap-1 rounded px-1 py-0.5 text-[10px] font-bold leading-none ${p.cls}`}
+      title={`${sq}º Esq: ${ACCESS_LABELS[state]}`}
+    >
+      <span className="opacity-80">{sq}</span>
+      <span>{p.abbr}</span>
     </span>
   );
 }
@@ -358,7 +369,7 @@ function AccessSelector({
 }) {
   const options: { key: AccessState; active: string }[] = [
     { key: "opcional", active: "bg-sky-500 text-white" },
-    { key: "todos", active: "bg-emerald-500 text-white" },
+    { key: "todos", active: "bg-emerald-600 text-white" },
     { key: "ninguem", active: "bg-slate-400 text-white" },
   ];
   return (
@@ -369,7 +380,7 @@ function AccessSelector({
           type="button"
           disabled={disabled}
           onClick={() => onChange(o.key)}
-          className={`px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
+          className={`px-2.5 py-1 text-xs font-semibold transition disabled:opacity-40 ${
             i > 0 ? "border-l border-slate-300 dark:border-gray-600" : ""
           } ${
             value === o.key
@@ -401,7 +412,7 @@ function GridCell({
     return (
       <button
         onClick={onClick}
-        className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-slate-200 px-2 py-2 text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300"
+        className="flex h-full min-h-[44px] w-full items-center justify-center rounded-lg border border-dashed border-slate-200 px-2 py-1.5 text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300"
         title="Criar refeição"
       >
         +
@@ -410,45 +421,38 @@ function GridCell({
   }
   return (
     <div
-      className={`rounded-lg border px-2 py-2 transition ${
+      className={`rounded-lg border px-1.5 py-1.5 transition ${
         slot.locked
           ? "border-slate-200 bg-slate-100 dark:border-gray-600 dark:bg-gray-700/50"
           : "border-slate-200 bg-white dark:border-gray-600 dark:bg-gray-700"
       }`}
     >
-      <div className="mb-1.5 flex items-center justify-between gap-1">
+      <div className="mb-1 flex items-center justify-between gap-1">
         <input
           type="checkbox"
           checked={checked}
           onChange={onToggleSelect}
-          className="h-4 w-4 accent-navy-600"
+          className="h-3.5 w-3.5 accent-navy-600"
           title="Selecionar"
         />
         {slot.locked ? (
-          <span title="Bloqueado">🔒</span>
+          <span className="text-xs" title="Bloqueado">
+            🔒
+          </span>
         ) : (
-          <span title="Aberto" className="text-emerald-500">
+          <span title="Aberto" className="text-xs text-emerald-500">
             ●
           </span>
         )}
       </div>
       <button
         onClick={onClick}
-        className="flex flex-wrap gap-1"
+        className="grid w-full grid-cols-2 gap-1"
         title="Editar acesso dos esquadrões"
       >
-        {ALL_SQUADRONS.map((sq) => {
-          const state = getAccess(slot.squadrons, sq);
-          return (
-            <span
-              key={sq}
-              className={`chip h-5 w-5 justify-center ${STATE_CHIP[state]}`}
-              title={`${sq}º Esq: ${ACCESS_LABELS[state]}`}
-            >
-              {sq}
-            </span>
-          );
-        })}
+        {ALL_SQUADRONS.map((sq) => (
+          <SquadronBadge key={sq} sq={sq} state={getAccess(slot.squadrons, sq)} />
+        ))}
       </button>
     </div>
   );
@@ -641,7 +645,7 @@ function CreatePanel({
     <section className="card overflow-hidden">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between px-5 py-4"
+        className="flex w-full items-center justify-between px-4 py-3"
       >
         <h2 className="font-bold text-navy-800 dark:text-gray-100">➕ Criar refeições</h2>
         <span className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>
@@ -650,13 +654,13 @@ function CreatePanel({
       </button>
 
       {open && (
-        <div className="space-y-5 border-t border-slate-100 px-5 py-5 animate-fade-in">
-          <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-4 border-t border-slate-100 px-4 py-4 animate-fade-in dark:border-gray-700">
+          <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Data início</span>
               <input
                 type="date"
-                className="rounded-lg border border-slate-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
               />
@@ -665,7 +669,7 @@ function CreatePanel({
               <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Data fim</span>
               <input
                 type="date"
-                className="rounded-lg border border-slate-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
               />
@@ -675,17 +679,17 @@ function CreatePanel({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-semibold text-slate-600 dark:text-gray-300">
-                Refeições e acesso por esquadrão
+                Refeições e acesso
               </p>
               <div className="flex gap-2">
                 <button
-                  className="btn-secondary px-3 py-1.5 text-xs"
+                  className="btn-secondary px-2.5 py-1 text-xs"
                   onClick={() => applyAll("opcional")}
                 >
                   Todos opcional
                 </button>
                 <button
-                  className="btn-secondary px-3 py-1.5 text-xs"
+                  className="btn-secondary px-2.5 py-1 text-xs"
                   onClick={() => applyAll("todos")}
                 >
                   Todos obrigatório
@@ -696,13 +700,13 @@ function CreatePanel({
             {MEAL_TYPES.map((mt) => (
               <div
                 key={mt}
-                className={`rounded-xl border p-3 transition ${
+                className={`rounded-xl border transition ${
                   config[mt].enabled
                     ? "border-navy-200 bg-navy-50/40 dark:border-navy-500/40 dark:bg-navy-500/10"
                     : "border-slate-200 dark:border-gray-700"
                 }`}
               >
-                <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-700 dark:text-gray-200">
+                <label className="flex cursor-pointer items-center gap-2 px-3 py-2 font-medium text-slate-700 dark:text-gray-200">
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-navy-600"
@@ -713,13 +717,13 @@ function CreatePanel({
                 </label>
 
                 {config[mt].enabled && (
-                  <div className="mt-3 space-y-1.5">
+                  <div className="grid grid-cols-1 gap-1.5 px-3 pb-3 sm:grid-cols-2">
                     {ALL_SQUADRONS.map((sq) => (
                       <div
                         key={sq}
-                        className="flex items-center justify-between gap-3"
+                        className="flex items-center justify-between gap-2"
                       >
-                        <span className="text-sm text-slate-600 dark:text-gray-300">
+                        <span className="text-xs text-slate-600 dark:text-gray-300">
                           {sq}º Esq
                         </span>
                         <AccessSelector
@@ -734,7 +738,7 @@ function CreatePanel({
             ))}
           </div>
 
-          <button className="btn-primary w-full sm:w-auto" onClick={create} disabled={busy}>
+          <button className="btn-primary w-full" onClick={create} disabled={busy}>
             {busy ? "Criando…" : "Criar refeições"}
           </button>
         </div>

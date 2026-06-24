@@ -84,9 +84,12 @@ export async function GET(req: Request) {
   }
 
   const slotIds = slots.map((s) => s.id);
+  const slotMeal = new Map<string, MealType>();
+  for (const s of slots) slotMeal.set(s.id, s.meal_type);
 
   const optIn = new Map<string, number>();
   const optOut = new Map<string, number>();
+  const markByCadetSlot = new Map<string, boolean>();
   try {
     const marks = await selectAll<{
       cadet_id: string;
@@ -96,6 +99,7 @@ export async function GET(req: Request) {
       q.in("slot_id", slotIds)
     );
     for (const m of marks) {
+      markByCadetSlot.set(`${m.slot_id}|${m.cadet_id}`, m.attending);
       const sq = cadetById.get(m.cadet_id)?.squadron;
       if (!sq) continue;
       const key = `${m.slot_id}|${sq}`;
@@ -121,6 +125,15 @@ export async function GET(req: Request) {
     return total;
   };
 
+  const isExpected = (s: SlotRow, c: CadetRow): boolean => {
+    const state = getAccess(s.squadrons, c.squadron);
+    if (state === "ninguem") return false;
+    const attending = markByCadetSlot.get(`${s.id}|${c.id}`);
+    if (state === "opcional") return attending === true;
+    if (isOptOutSquadron(c.squadron)) return attending !== false;
+    return true;
+  };
+
   let entries: Array<{ cadet_id: string; slot_id: string; entered_at: string }> =
     [];
   try {
@@ -131,12 +144,42 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Erro ao buscar entradas" }, { status: 500 });
   }
 
-  const slotMeal = new Map<string, MealType>();
-  for (const s of slots) slotMeal.set(s.id, s.meal_type);
+  let attempts: Array<{
+    cadet_id: string | null;
+    slot_id: string;
+    result: "autorizado" | "nao_marcou" | "duplicado";
+    scanned_at: string;
+  }> = [];
+  try {
+    attempts = await selectAll(
+      "scan_attempts",
+      "id, cadet_id, slot_id, result, scanned_at",
+      (q) => q.in("slot_id", slotIds)
+    );
+  } catch {
+    return NextResponse.json({ error: "Erro ao buscar tentativas" }, { status: 500 });
+  }
+
   const enteredCount = new Map<string, number>();
+  const enteredSet = new Set<string>();
   for (const e of entries) {
     enteredCount.set(e.slot_id, (enteredCount.get(e.slot_id) ?? 0) + 1);
+    enteredSet.add(`${e.slot_id}|${e.cadet_id}`);
   }
+
+  const hhmm = (iso: string) =>
+    new Date(iso).toLocaleString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  const cadetCols = (cadetId: string | null) => {
+    const c = cadetId ? cadetById.get(cadetId) : undefined;
+    return {
+      number: c?.number ?? "—",
+      name: c?.name ?? "—",
+      squadron: c ? SQUADRON_SHORT[c.squadron] ?? "—" : "—",
+    };
+  };
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Refeições AFA";
@@ -150,9 +193,21 @@ export async function GET(req: Request) {
     { header: "Refeição", key: "meal", width: 16 },
     { header: "Marcaram", key: "expected", width: 12 },
     { header: "Entraram", key: "entered", width: 12 },
-    { header: "Faltaram", key: "noshow", width: 12 },
+    { header: "Não marcaram mas foram", key: "notmarked", width: 24 },
+    { header: "Passaram QR 2x+", key: "dup", width: 18 },
+    { header: "No-show (faltaram)", key: "noshow", width: 18 },
   ];
   styleHeaderRow(resumo.getRow(1));
+
+  const notMarkedCount = new Map<string, number>();
+  const duplicateCount = new Map<string, number>();
+  for (const a of attempts) {
+    if (a.result === "nao_marcou")
+      notMarkedCount.set(a.slot_id, (notMarkedCount.get(a.slot_id) ?? 0) + 1);
+    else if (a.result === "duplicado")
+      duplicateCount.set(a.slot_id, (duplicateCount.get(a.slot_id) ?? 0) + 1);
+  }
+
   for (const s of slots) {
     const expected = expectedOf(s);
     const entered = enteredCount.get(s.id) ?? 0;
@@ -160,9 +215,13 @@ export async function GET(req: Request) {
       meal: MEAL_SHORT[s.meal_type],
       expected,
       entered,
+      notmarked: notMarkedCount.get(s.id) ?? 0,
+      dup: duplicateCount.get(s.id) ?? 0,
       noshow: Math.max(0, expected - entered),
     });
-    [2, 3, 4].forEach((c) => (row.getCell(c).alignment = { horizontal: "center" }));
+    [2, 3, 4, 5, 6].forEach(
+      (c) => (row.getCell(c).alignment = { horizontal: "center" })
+    );
   }
 
   // --- Aba "Entradas" (lista de quem entrou) ---
@@ -182,18 +241,65 @@ export async function GET(req: Request) {
     a.entered_at < b.entered_at ? -1 : 1
   );
   for (const e of sorted) {
-    const c = cadetById.get(e.cadet_id);
     const meal = slotMeal.get(e.slot_id);
     ws.addRow({
-      number: c?.number ?? "—",
-      name: c?.name ?? "—",
-      squadron: c ? SQUADRON_SHORT[c.squadron] ?? "—" : "—",
+      ...cadetCols(e.cadet_id),
       meal: meal ? MEAL_SHORT[meal] : "—",
-      time: new Date(e.entered_at).toLocaleString("pt-BR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+      time: hhmm(e.entered_at),
     });
+  }
+
+  // --- Aba de tentativas (nao_marcou / duplicado) ---
+  function attemptsSheet(
+    title: string,
+    result: "nao_marcou" | "duplicado"
+  ) {
+    const sheet = wb.addWorksheet(title, {
+      views: [{ state: "frozen", ySplit: 1 }],
+    });
+    sheet.columns = [
+      { header: "Número", key: "number", width: 12 },
+      { header: "Nome", key: "name", width: 28 },
+      { header: "Esquadrão", key: "squadron", width: 12 },
+      { header: "Refeição", key: "meal", width: 14 },
+      { header: "Horário", key: "time", width: 12 },
+    ];
+    styleHeaderRow(sheet.getRow(1));
+    const rows = attempts
+      .filter((a) => a.result === result)
+      .sort((a, b) => (a.scanned_at < b.scanned_at ? -1 : 1));
+    for (const a of rows) {
+      const meal = slotMeal.get(a.slot_id);
+      sheet.addRow({
+        ...cadetCols(a.cadet_id),
+        meal: meal ? MEAL_SHORT[meal] : "—",
+        time: hhmm(a.scanned_at),
+      });
+    }
+  }
+  attemptsSheet("Não marcaram mas foram", "nao_marcou");
+  attemptsSheet("Passaram QR 2x+", "duplicado");
+
+  // --- Aba "No-show" (esperados que nunca passaram o QR) ---
+  const noShowSheet = wb.addWorksheet("No-show", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  noShowSheet.columns = [
+    { header: "Número", key: "number", width: 12 },
+    { header: "Nome", key: "name", width: 28 },
+    { header: "Esquadrão", key: "squadron", width: 12 },
+    { header: "Refeição", key: "meal", width: 14 },
+  ];
+  styleHeaderRow(noShowSheet.getRow(1));
+  for (const s of slots) {
+    for (const c of cadets) {
+      if (!isExpected(s, c)) continue;
+      if (enteredSet.has(`${s.id}|${c.id}`)) continue;
+      noShowSheet.addRow({
+        ...cadetCols(c.id),
+        meal: MEAL_SHORT[s.meal_type],
+      });
+    }
   }
 
   const buffer = await wb.xlsx.writeBuffer();

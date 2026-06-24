@@ -73,6 +73,23 @@ create table if not exists public.meal_entries (
 );
 
 -- --------------------------------------------------------------------------
+-- Tabela: scan_attempts
+-- LOG completo de TODAS as leituras de QR feitas pelo fiscal (meal_entries
+-- guarda só as entradas oficiais). result:
+--   'autorizado': passou pela 1ª vez e entrou (também grava meal_entries)
+--   'nao_marcou': tentou entrar sem direito/sem ter marcado a refeição
+--   'duplicado' : passou o QR de novo na mesma refeição (2ª+ leitura)
+-- --------------------------------------------------------------------------
+create table if not exists public.scan_attempts (
+  id         uuid primary key default gen_random_uuid(),
+  cadet_id   uuid references public.cadets(id) on delete cascade,
+  slot_id    uuid not null references public.meal_slots(id) on delete cascade,
+  fiscal_id  uuid references public.cadets(id) on delete set null,
+  result     text not null check (result in ('autorizado', 'nao_marcou', 'duplicado')),
+  scanned_at timestamptz default now()
+);
+
+-- --------------------------------------------------------------------------
 -- Tabela: menu_photos
 -- Foto do cardápio da semana enviada pelo admin e exibida aos cadetes.
 -- Apenas 1 registro com active = true por vez (a API desativa os anteriores).
@@ -98,6 +115,9 @@ create index if not exists idx_meal_entries_slot  on public.meal_entries (slot_i
 create index if not exists idx_meal_entries_cadet on public.meal_entries (cadet_id);
 create index if not exists idx_cadets_is_fiscal   on public.cadets (is_fiscal);
 create index if not exists idx_menu_photos_active on public.menu_photos (active);
+create index if not exists idx_scan_attempts_slot   on public.scan_attempts (slot_id);
+create index if not exists idx_scan_attempts_result on public.scan_attempts (result);
+create index if not exists idx_scan_attempts_cadet  on public.scan_attempts (cadet_id);
 
 -- --------------------------------------------------------------------------
 -- Row Level Security
@@ -111,6 +131,7 @@ alter table public.meal_slots   enable row level security;
 alter table public.meal_marks   enable row level security;
 alter table public.meal_entries enable row level security;
 alter table public.menu_photos  enable row level security;
+alter table public.scan_attempts enable row level security;
 
 -- Políticas permissivas apenas para a role de serviço.
 drop policy if exists "service_role full access" on public.cadets;
@@ -131,6 +152,10 @@ create policy "service_role full access" on public.meal_entries
 
 drop policy if exists "service_role full access" on public.menu_photos;
 create policy "service_role full access" on public.menu_photos
+  for all to service_role using (true) with check (true);
+
+drop policy if exists "service_role full access" on public.scan_attempts;
+create policy "service_role full access" on public.scan_attempts
   for all to service_role using (true) with check (true);
 
 -- --------------------------------------------------------------------------
