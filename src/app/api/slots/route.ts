@@ -10,6 +10,7 @@ import {
   type AccessState,
   type SquadronAccess,
 } from "@/lib/constants";
+import { todaySaoPaulo, parseISODate, addDays, toISODate } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -55,11 +56,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ slots });
   }
 
+  // Refeições passadas somem para o cadete 1 dia após a data delas: ele vê até
+  // o dia seguinte (data >= ontem). O cálculo de "hoje" usa o fuso de São Paulo
+  // e a comparação é por data (YYYY-MM-DD ordena lexicograficamente). O slot não
+  // é apagado — apenas fica oculto para o cadete (o admin continua vendo tudo).
+  const cutoff = toISODate(addDays(parseISODate(todaySaoPaulo()), -1));
+
   // Cadete: vê slots em que seu esquadrão é "opcional" ou "todos".
   // "ninguem" não aparece. Inclui o estado de acesso e a marcação dele.
   const visible = slots
     .map((s) => ({ ...s, access: getAccess(s.squadrons, session.squadron) }))
-    .filter((s) => s.access !== "ninguem");
+    .filter((s) => s.access !== "ninguem" && s.date >= cutoff);
 
   // Escolhas explícitas do cadete (paginado): opt-ins e opt-outs.
   const optInSet = new Set<string>(); // attending=true  (Sim em opcional)
