@@ -283,6 +283,49 @@ body {
   border-radius: 20px;
   white-space: nowrap;
 }
+.cad-day-head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.cad-allday {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #8b97a8;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.cad-allday input {
+  width: 15px;
+  height: 15px;
+  accent-color: #3880ff;
+  cursor: pointer;
+  margin: 0;
+}
+.cad-allday.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.cad-allday.disabled input {
+  cursor: not-allowed;
+}
+/* Indicador discreto de salvamento (debounce) na seção "Suas Refeições". */
+.cad-save {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.cad-save-busy {
+  color: #8b97a8;
+}
+.cad-save-ok {
+  color: #5fd0a0;
+}
 .cad-meal {
   width: 100%;
   display: flex;

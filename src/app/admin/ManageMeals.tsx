@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MEAL_TYPES,
   MEAL_SHORT,
@@ -128,6 +128,25 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     setSelected((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  }
+
+  // IDs das refeições que EXISTEM em um dia (para a caixa "selecionar o dia").
+  function daySlotIds(d: string): string[] {
+    const ids: string[] = [];
+    for (const mt of MEAL_TYPES) {
+      const slot = slotMap.get(`${d}|${mt}`);
+      if (slot) ids.push(slot.id);
+    }
+    return ids;
+  }
+
+  // Marca/desmarca todas as refeições existentes de um dia em lote.
+  function toggleSelectDay(ids: string[], check: boolean) {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      for (const id of ids) (check ? n.add(id) : n.delete(id));
       return n;
     });
   }
@@ -303,14 +322,26 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
-                {days.map((d) => (
+                {days.map((d) => {
+                  const dayIds = daySlotIds(d);
+                  return (
                   <tr key={d} className="align-top">
                     <td className="whitespace-nowrap px-3 py-2">
-                      <div className="text-sm font-semibold text-navy-800 dark:text-gray-100">
-                        {formatShortDate(d)}
-                      </div>
-                      <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
-                        {weekdayShort(d)}
+                      <div className="flex items-start gap-2">
+                        <DaySelectCheckbox
+                          ids={dayIds}
+                          selected={selected}
+                          onToggle={toggleSelectDay}
+                          className="mt-0.5 h-3.5 w-3.5"
+                        />
+                        <div>
+                          <div className="text-sm font-semibold text-navy-800 dark:text-gray-100">
+                            {formatShortDate(d)}
+                          </div>
+                          <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
+                            {weekdayShort(d)}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     {MEAL_TYPES.map((mt) => {
@@ -336,58 +367,72 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
                       );
                     })}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {/* Grade DESKTOP (cards largos, esquadrões por extenso) */}
+          {/* Grade DESKTOP (cards largos, esquadrões por extenso). Células com
+              largura mínima generosa (≥190px) p/ caber "1º Esq … Obrigatório"
+              numa linha; rola na horizontal se a tela não comportar. */}
           <div className="hidden px-4 py-4 lg:block">
-            {/* Cabeçalho de colunas */}
-            <div className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))] gap-2.5 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
-              <div>Dia</div>
-              {MEAL_TYPES.map((mt) => (
-                <div key={mt}>{MEAL_SHORT[mt]}</div>
-              ))}
-            </div>
+            <div className="overflow-x-auto">
+              {/* Cabeçalho de colunas */}
+              <div className="grid grid-cols-[92px_repeat(4,minmax(190px,1fr))] gap-2.5 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
+                <div>Dia</div>
+                {MEAL_TYPES.map((mt) => (
+                  <div key={mt}>{MEAL_SHORT[mt]}</div>
+                ))}
+              </div>
 
-            <div className="space-y-2.5">
-              {days.map((d) => (
-                <div
-                  key={d}
-                  className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))] gap-2.5"
-                >
-                  <div className="flex flex-col justify-center px-1">
-                    <div className="text-lg font-bold leading-tight text-navy-800 dark:text-gray-100">
-                      {formatShortDate(d)}
+              <div className="space-y-2.5">
+                {days.map((d) => {
+                  const dayIds = daySlotIds(d);
+                  return (
+                    <div
+                      key={d}
+                      className="grid grid-cols-[92px_repeat(4,minmax(190px,1fr))] gap-2.5"
+                    >
+                      <div className="flex flex-col justify-center gap-1 px-1">
+                        <DaySelectCheckbox
+                          ids={dayIds}
+                          selected={selected}
+                          onToggle={toggleSelectDay}
+                          className="h-4 w-4"
+                        />
+                        <div className="text-lg font-bold leading-tight text-navy-800 dark:text-gray-100">
+                          {formatShortDate(d)}
+                        </div>
+                        <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
+                          {weekdayShort(d)}
+                        </div>
+                      </div>
+                      {MEAL_TYPES.map((mt) => {
+                        const slot = slotMap.get(`${d}|${mt}`);
+                        return (
+                          <DesktopCell
+                            key={mt}
+                            slot={slot}
+                            checked={slot ? selected.has(slot.id) : false}
+                            onToggleSelect={() => slot && toggleSelect(slot.id)}
+                            onClick={() =>
+                              setEditing({
+                                date: d,
+                                meal: mt,
+                                access: slot
+                                  ? fullAccess(slot.squadrons)
+                                  : uniformAccess("opcional"),
+                                existing: slot,
+                              })
+                            }
+                          />
+                        );
+                      })}
                     </div>
-                    <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
-                      {weekdayShort(d)}
-                    </div>
-                  </div>
-                  {MEAL_TYPES.map((mt) => {
-                    const slot = slotMap.get(`${d}|${mt}`);
-                    return (
-                      <DesktopCell
-                        key={mt}
-                        slot={slot}
-                        checked={slot ? selected.has(slot.id) : false}
-                        onToggleSelect={() => slot && toggleSelect(slot.id)}
-                        onClick={() =>
-                          setEditing({
-                            date: d,
-                            meal: mt,
-                            access: slot
-                              ? fullAccess(slot.squadrons)
-                              : uniformAccess("opcional"),
-                            existing: slot,
-                          })
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              ))}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -550,12 +595,53 @@ const STATE_ROW: Record<AccessState, string> = {
 function SquadronRow({ sq, state }: { sq: number; state: AccessState }) {
   return (
     <span
-      className={`flex items-center justify-between gap-1 rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ring-inset ${STATE_ROW[state]}`}
+      className={`flex items-center justify-between gap-2 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${STATE_ROW[state]}`}
       title={`${sq}º Esquadrão: ${STATE_PILL[state].label}`}
     >
       <span className="opacity-90">{sq}º Esq</span>
       <span>{STATE_PILL[state].label}</span>
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+// Caixa que seleciona/desseleciona TODAS as refeições existentes de um dia.
+// Estado indeterminado quando apenas algumas do dia estão selecionadas.
+function DaySelectCheckbox({
+  ids,
+  selected,
+  onToggle,
+  className = "",
+}: {
+  ids: string[];
+  selected: Set<string>;
+  onToggle: (ids: string[], check: boolean) => void;
+  className?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const count = ids.filter((id) => selected.has(id)).length;
+  const all = ids.length > 0 && count === ids.length;
+  const some = count > 0 && !all;
+
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = some;
+  }, [some]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={all}
+      disabled={ids.length === 0}
+      onChange={() => onToggle(ids, !all)}
+      className={`accent-navy-600 disabled:opacity-30 ${className}`}
+      title={
+        ids.length === 0
+          ? "Sem refeições neste dia"
+          : "Selecionar todas as refeições do dia"
+      }
+    />
   );
 }
 

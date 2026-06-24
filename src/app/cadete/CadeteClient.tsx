@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client";
 import {
@@ -36,22 +36,21 @@ export default function CadeteClient({ user, qrToken }: Props) {
   const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pending, setPending] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
   const [pwOpen, setPwOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Toast de "salvo" com debounce: ao marcar várias refeições em sequência,
-  // mostra um único toast ~700ms após a última gravação bem-sucedida.
+  // Indicador discreto de salvamento em lote (debounce).
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "pending" | "saving" | "saved"
+  >("idle");
+
+  // Alterações pendentes (slot_id -> valor desejado) acumuladas entre cliques.
+  // Gravamos tudo de uma vez 2s após o último clique (debounce), evitando uma
+  // chuva de avisos quando o cadete marca várias refeições em sequência.
+  const dirtyRef = useRef<Map<string, boolean>>(new Map());
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const savedTimer = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => () => clearTimeout(savedTimer.current), []);
-  function notifySaved() {
-    clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(
-      () => toast.success("Refeições salvas com sucesso! ✓"),
-      700
-    );
-  }
 
   useEffect(() => {
     (async () => {
@@ -66,6 +65,84 @@ export default function CadeteClient({ user, qrToken }: Props) {
         setLoading(false);
       }
     })();
+  }, []);
+
+  // Grava todas as alterações pendentes de uma vez. Um único toast no fim.
+  const flush = useCallback(async () => {
+    clearTimeout(saveTimer.current);
+    const changes = Array.from(dirtyRef.current.entries());
+    if (changes.length === 0) return;
+    dirtyRef.current.clear();
+    setSaveStatus("saving");
+    try {
+      const results = await Promise.all(
+        changes.map(([slot_id, marked]) =>
+          apiFetch("/api/marks", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slot_id, marked }),
+          })
+        )
+      );
+      if (results.every((r) => r.ok)) {
+        clearTimeout(savedTimer.current);
+        setSaveStatus("saved");
+        toast.success("Refeições salvas com sucesso! ✓");
+        savedTimer.current = setTimeout(() => setSaveStatus("idle"), 2500);
+      } else {
+        // Alguma falhou: ressincroniza com o servidor e avisa.
+        setSaveStatus("idle");
+        toast.error("Não foi possível salvar tudo. Recarregando…");
+        try {
+          const res = await apiFetch("/api/slots");
+          const data = await res.json();
+          if (res.ok) setSlots(data.slots ?? []);
+        } catch {
+          /* mantém o estado atual */
+        }
+      }
+    } catch {
+      setSaveStatus("idle");
+      toast.error("Erro de conexão ao salvar.");
+    }
+  }, [toast]);
+
+  // Agenda (ou reagenda) o salvamento em lote 2s após o último clique.
+  const scheduleSave = useCallback(() => {
+    setSaveStatus("pending");
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void flush();
+    }, 2000);
+  }, [flush]);
+
+  // Garante que nada se perca ao sair: grava na desmontagem e no beforeunload.
+  // No unload usamos keepalive para a requisição sobreviver à navegação.
+  useEffect(() => {
+    function flushOnUnload() {
+      const changes = Array.from(dirtyRef.current.entries());
+      if (changes.length === 0) return;
+      dirtyRef.current.clear();
+      for (const [slot_id, marked] of changes) {
+        try {
+          fetch("/api/marks", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slot_id, marked }),
+            keepalive: true,
+          });
+        } catch {
+          /* best-effort */
+        }
+      }
+    }
+    window.addEventListener("beforeunload", flushOnUnload);
+    return () => {
+      window.removeEventListener("beforeunload", flushOnUnload);
+      clearTimeout(saveTimer.current);
+      clearTimeout(savedTimer.current);
+      flushOnUnload();
+    };
   }, []);
 
   // Agrupa por data, mantendo ordem cronológica.
@@ -90,41 +167,29 @@ export default function CadeteClient({ user, qrToken }: Props) {
     return optOut; // access === "todos"
   }
 
-  async function toggle(slot: Slot, next: boolean) {
-    if (!canToggle(slot) || pending.has(slot.id)) return;
-    // Atualização otimista
+  // Marca/desmarca uma refeição: atualização otimista + agenda gravação.
+  function applyMark(slot: Slot, next: boolean) {
+    if (!canToggle(slot) || slot.marked === next) return;
     setSlots((prev) =>
       prev.map((s) => (s.id === slot.id ? { ...s, marked: next } : s))
     );
-    setPending((p) => new Set(p).add(slot.id));
-    try {
-      const res = await apiFetch("/api/marks", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slot_id: slot.id, marked: next }),
-      });
-      if (!res.ok) {
-        setSlots((prev) =>
-          prev.map((s) => (s.id === slot.id ? { ...s, marked: !next } : s))
-        );
-        clearTimeout(savedTimer.current);
-        toast.error("Não foi possível salvar. Tente novamente.");
-      } else {
-        notifySaved();
-      }
-    } catch {
-      setSlots((prev) =>
-        prev.map((s) => (s.id === slot.id ? { ...s, marked: !next } : s))
-      );
-      clearTimeout(savedTimer.current);
-      toast.error("Erro de conexão.");
-    } finally {
-      setPending((p) => {
-        const n = new Set(p);
-        n.delete(slot.id);
-        return n;
-      });
+    dirtyRef.current.set(slot.id, next);
+    scheduleSave();
+  }
+
+  // "Marcar todas": aplica a todas as refeições do dia que o cadete PODE alterar
+  // (opcionais sempre; obrigatórias só p/ 3º/4º; nunca as bloqueadas).
+  function toggleAllDay(daySlots: Slot[], checked: boolean) {
+    const editable = daySlots.filter(canToggle);
+    if (editable.length === 0) return;
+    const ids = new Set(editable.map((s) => s.id));
+    setSlots((prev) =>
+      prev.map((s) => (ids.has(s.id) ? { ...s, marked: checked } : s))
+    );
+    for (const s of editable) {
+      if (s.marked !== checked) dirtyRef.current.set(s.id, checked);
     }
+    if (dirtyRef.current.size > 0) scheduleSave();
   }
 
   async function logout() {
@@ -172,7 +237,15 @@ export default function CadeteClient({ user, qrToken }: Props) {
         {/* Seção */}
         <div className="cad-max cad-sect">
           <h2>Suas Refeições</h2>
-          <div className="cad-hint">Toque para marcar</div>
+          {saveStatus === "saving" ? (
+            <div className="cad-save cad-save-busy">Salvando…</div>
+          ) : saveStatus === "pending" ? (
+            <div className="cad-save cad-save-busy">Salvando…</div>
+          ) : saveStatus === "saved" ? (
+            <div className="cad-save cad-save-ok">Salvo ✓</div>
+          ) : (
+            <div className="cad-hint">Toque para marcar</div>
+          )}
         </div>
 
         {loading && (
@@ -207,6 +280,10 @@ export default function CadeteClient({ user, qrToken }: Props) {
             {days.map(({ date, daySlots }) => {
               const markedCount = daySlots.filter((s) => s.marked).length;
               const [wd, dt] = formatLongDate(date).split(", ");
+              const editable = daySlots.filter(canToggle);
+              const allMarked =
+                editable.length > 0 && editable.every((s) => s.marked);
+              const someMarked = editable.some((s) => s.marked);
               return (
                 <div className="cad-day" key={date}>
                   <div className="cad-day-head">
@@ -214,8 +291,17 @@ export default function CadeteClient({ user, qrToken }: Props) {
                       <div className="cad-day-wd">{wd}</div>
                       <div className="cad-day-dt">{dt}</div>
                     </div>
-                    <div className="cad-count">
-                      {markedCount} {markedCount === 1 ? "marcada" : "marcadas"}
+                    <div className="cad-day-head-right">
+                      <div className="cad-count">
+                        {markedCount}{" "}
+                        {markedCount === 1 ? "marcada" : "marcadas"}
+                      </div>
+                      <DayAllToggle
+                        checked={allMarked}
+                        indeterminate={someMarked && !allMarked}
+                        disabled={editable.length === 0}
+                        onChange={(c) => toggleAllDay(daySlots, c)}
+                      />
                     </div>
                   </div>
 
@@ -265,8 +351,7 @@ export default function CadeteClient({ user, qrToken }: Props) {
                         key={slot.id}
                         type="button"
                         className={`cad-meal ${stateClass}`}
-                        disabled={pending.has(slot.id)}
-                        onClick={() => toggle(slot, !slot.marked)}
+                        onClick={() => applyMark(slot, !slot.marked)}
                       >
                         {inner}
                       </button>
@@ -291,6 +376,39 @@ export default function CadeteClient({ user, qrToken }: Props) {
       {/* Trocar senha (sheet escuro) */}
       {pwOpen && <ChangePasswordSheet onClose={() => setPwOpen(false)} />}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+// Caixa "Marcar todas" do dia. Suporta estado indeterminado (algumas marcadas).
+function DayAllToggle({
+  checked,
+  indeterminate,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = !disabled && indeterminate;
+  }, [indeterminate, disabled]);
+
+  return (
+    <label className={`cad-allday${disabled ? " disabled" : ""}`}>
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      Todas
+    </label>
   );
 }
 
