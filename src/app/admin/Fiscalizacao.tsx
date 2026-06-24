@@ -27,6 +27,8 @@ interface ListItem {
   name: string;
   squadron: number;
   at: string; // "" para no-show
+  flagged_person?: string | null; // duplicados: pessoa flagrada (fraude)
+  fiscal_note?: string | null; // duplicados: observação do fiscal
 }
 
 type Category = "entered" | "notMarked" | "duplicates" | "noShows";
@@ -161,6 +163,7 @@ export default function Fiscalizacao() {
   const totalAll =
     counts.entered + counts.notMarked + counts.duplicates + counts.noShows;
   const showTime = category !== "noShows";
+  const isDup = category === "duplicates";
 
   return (
     <div className="space-y-5">
@@ -269,47 +272,87 @@ export default function Fiscalizacao() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] border-collapse text-sm">
+          <table
+            className={`w-full border-collapse text-sm ${
+              isDup ? "min-w-[760px]" : "min-w-[520px]"
+            }`}
+          >
             <thead>
               <tr className="bg-gradient-to-r from-navy-900 to-navy-700 text-xs uppercase tracking-wide text-blue-50">
                 <th className="px-4 py-3 text-left font-semibold">Número</th>
-                <th className="px-4 py-3 text-left font-semibold">Nome</th>
+                <th className="px-4 py-3 text-left font-semibold">
+                  {isDup ? "Dono do QR" : "Nome"}
+                </th>
                 <th className="px-3 py-3 text-center font-semibold">Esq.</th>
                 <th className="px-3 py-3 text-center font-semibold">Refeição</th>
                 {showTime && (
                   <th className="px-3 py-3 text-center font-semibold">Horário</th>
                 )}
+                {isDup && (
+                  <>
+                    <th className="px-3 py-3 text-left font-semibold">
+                      Quem usou (flagrado)
+                    </th>
+                    <th className="px-3 py-3 text-left font-semibold">Obs.</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
-              {visibleItems.map((e, i) => (
-                <tr
-                  key={`${e.slot_id}-${e.number}-${i}`}
-                  className="odd:bg-white even:bg-slate-50/50 dark:odd:bg-gray-800 dark:even:bg-gray-800/50"
-                >
-                  <td className="px-4 py-2.5 font-mono text-slate-500 dark:text-gray-400">
-                    {e.number}
-                  </td>
-                  <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-gray-200">
-                    {e.name}
-                  </td>
-                  <td className="px-3 py-2.5 text-center text-slate-500 dark:text-gray-400">
-                    {SQUADRON_SHORT[e.squadron] ?? "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-center text-slate-500 dark:text-gray-400">
-                    {e.meal_type ? MEAL_SHORT[e.meal_type] : "—"}
-                  </td>
-                  {showTime && (
-                    <td className="px-3 py-2.5 text-center font-semibold text-navy-700 dark:text-gray-100">
-                      {e.at ? hhmm(e.at) : "—"}
+              {visibleItems.map((e, i) => {
+                const flagged = isDup && !!e.flagged_person;
+                return (
+                  <tr
+                    key={`${e.slot_id}-${e.number}-${i}`}
+                    className={
+                      flagged
+                        ? "bg-red-50 dark:bg-red-500/10"
+                        : "odd:bg-white even:bg-slate-50/50 dark:odd:bg-gray-800 dark:even:bg-gray-800/50"
+                    }
+                  >
+                    <td className="px-4 py-2.5 font-mono text-slate-500 dark:text-gray-400">
+                      {e.number}
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-gray-200">
+                      {flagged && (
+                        <span className="mr-1" title="Possível fraude de QR">
+                          🚨
+                        </span>
+                      )}
+                      {e.name}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-slate-500 dark:text-gray-400">
+                      {SQUADRON_SHORT[e.squadron] ?? "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-slate-500 dark:text-gray-400">
+                      {e.meal_type ? MEAL_SHORT[e.meal_type] : "—"}
+                    </td>
+                    {showTime && (
+                      <td className="px-3 py-2.5 text-center font-semibold text-navy-700 dark:text-gray-100">
+                        {e.at ? hhmm(e.at) : "—"}
+                      </td>
+                    )}
+                    {isDup && (
+                      <>
+                        <td className="px-3 py-2.5 font-medium text-red-700 dark:text-red-300">
+                          {e.flagged_person || (
+                            <span className="font-normal text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-500 dark:text-gray-400">
+                          {e.fiscal_note || (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
               {!loading && visibleItems.length === 0 && (
                 <tr>
                   <td
-                    colSpan={showTime ? 5 : 4}
+                    colSpan={(showTime ? 5 : 4) + (isDup ? 2 : 0)}
                     className="px-4 py-8 text-center text-slate-400 dark:text-gray-500"
                   >
                     Nenhum registro nesta categoria.

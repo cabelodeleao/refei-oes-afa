@@ -22,6 +22,15 @@ interface ScanResult {
   cadet?: { name: string; number: string; squadron_label: string };
   entered_at?: string | null;
   reason?: string;
+  attempt_id?: string | null;
+}
+
+// Alvo de anotação de fraude: uma leitura duplicada (amarela) que o fiscal
+// pode marcar com a pessoa real que está usando o QR alheio.
+interface FlagTarget {
+  attemptId: string;
+  ownerName: string;
+  ownerNumber: string;
 }
 
 interface RecentItem {
@@ -87,6 +96,14 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
   const [count, setCount] = useState(0);
   const [recent, setRecent] = useState<RecentItem[]>([]);
 
+  // Anotação de fraude de QR (leitura duplicada).
+  const [flagTarget, setFlagTarget] = useState<FlagTarget | null>(null);
+  const [flagPerson, setFlagPerson] = useState("");
+  const [flagNote, setFlagNote] = useState("");
+  const [flagBusy, setFlagBusy] = useState(false);
+  const [flagDone, setFlagDone] = useState(false);
+  const [flagError, setFlagError] = useState("");
+
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const busyRef = useRef(false); // ignora leituras enquanto um resultado é exibido
   const resultTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -116,6 +133,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
     const s = slots.find((x) => x.id === id);
     setCount(s?.entered ?? 0);
     setRecent([]);
+    setFlagTarget(null);
   }
 
   const stopScanner = useCallback(async () => {
@@ -159,6 +177,18 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
           setCount((c) => c + 1);
         } else if (data.status === "ja_registrado") {
           beep("warn");
+          // Abre o painel p/ anotar quem está usando o QR alheio (fraude).
+          if (data.attempt_id && data.cadet) {
+            setFlagTarget({
+              attemptId: data.attempt_id,
+              ownerName: data.cadet.name,
+              ownerNumber: data.cadet.number,
+            });
+            setFlagPerson("");
+            setFlagNote("");
+            setFlagDone(false);
+            setFlagError("");
+          }
         } else {
           beep("err");
         }
@@ -233,9 +263,40 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
   async function stopScanning() {
     clearTimeout(resultTimer.current);
     setResult(null);
+    setFlagTarget(null);
     busyRef.current = false;
     await stopScanner();
     setScanning(false);
+  }
+
+  async function submitFlag() {
+    if (!flagTarget) return;
+    if (!flagPerson.trim() && !flagNote.trim()) {
+      setFlagError("Informe quem está usando o QR ou uma observação.");
+      return;
+    }
+    setFlagBusy(true);
+    setFlagError("");
+    try {
+      const res = await apiFetch(`/api/fiscal/scan/${flagTarget.attemptId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          flagged_person: flagPerson,
+          fiscal_note: flagNote,
+        }),
+      });
+      if (res.ok) {
+        setFlagDone(true);
+      } else {
+        const data = await res.json().catch(() => null);
+        setFlagError(data?.error ?? "Não foi possível registrar.");
+      }
+    } catch {
+      setFlagError("Erro de conexão.");
+    } finally {
+      setFlagBusy(false);
+    }
   }
 
   const selectedSlot = slots.find((s) => s.id === slotId);
@@ -366,6 +427,84 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
             )}
           </div>
         </section>
+
+        {/* Anotação de fraude: QR já usado, possivelmente por outra pessoa */}
+        {flagTarget && (
+          <section className="card overflow-hidden border-l-4 border-amber-500 animate-fade-in">
+            <div className="bg-amber-50 px-5 py-3 dark:bg-amber-500/10">
+              <h3 className="flex items-center gap-2 text-sm font-bold text-amber-700 dark:text-amber-300">
+                ⚠ QR já usado
+              </h3>
+              <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-200/70">
+                Este QR é de{" "}
+                <span className="font-semibold">{flagTarget.ownerName}</span> (
+                {flagTarget.ownerNumber}) e já entrou. Se quem está aqui é{" "}
+                <span className="font-semibold">outra pessoa</span>, registre
+                abaixo para apuração. Se for o próprio dono por engano, ignore.
+              </p>
+            </div>
+
+            {flagDone ? (
+              <div className="flex items-center justify-between gap-3 px-5 py-4">
+                <p className="text-sm font-semibold text-emerald-600">
+                  ✓ Irregularidade registrada.
+                </p>
+                <button
+                  className="btn-ghost px-3 py-1.5 text-sm"
+                  onClick={() => setFlagTarget(null)}
+                >
+                  Fechar
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 px-5 py-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                    Quem está usando este QR? (nome ou número)
+                  </label>
+                  <input
+                    className="input"
+                    placeholder="Ex: 26/1234 João Silva"
+                    value={flagPerson}
+                    onChange={(e) => setFlagPerson(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                    Observação (opcional)
+                  </label>
+                  <input
+                    className="input"
+                    placeholder="Detalhes da ocorrência"
+                    value={flagNote}
+                    onChange={(e) => setFlagNote(e.target.value)}
+                  />
+                </div>
+                {flagError && (
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    {flagError}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    className="btn-danger flex-1"
+                    onClick={submitFlag}
+                    disabled={flagBusy}
+                  >
+                    {flagBusy ? "Registrando…" : "Registrar irregularidade"}
+                  </button>
+                  <button
+                    className="btn-ghost px-3"
+                    onClick={() => setFlagTarget(null)}
+                    disabled={flagBusy}
+                  >
+                    Ignorar
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Contador */}
         {selectedSlot && (

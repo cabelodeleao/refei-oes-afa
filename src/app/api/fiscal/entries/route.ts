@@ -31,6 +31,8 @@ interface ListItem {
   name: string;
   squadron: number;
   at: string; // horário do evento (entered_at / scanned_at). "" p/ no-show.
+  flagged_person?: string | null; // só em duplicados: pessoa flagrada (fraude)
+  fiscal_note?: string | null; // só em duplicados: observação do fiscal
 }
 
 // GET /api/fiscal/entries?date=YYYY-MM-DD  (admin)
@@ -162,12 +164,14 @@ export async function GET(req: Request) {
     slot_id: string;
     result: "autorizado" | "nao_marcou" | "duplicado";
     scanned_at: string;
+    flagged_person: string | null;
+    fiscal_note: string | null;
   }> = [];
   if (slotIds.length > 0) {
     try {
       attempts = await selectAll(
         "scan_attempts",
-        "id, cadet_id, slot_id, result, scanned_at",
+        "id, cadet_id, slot_id, result, scanned_at, flagged_person, fiscal_note",
         (q) => q.in("slot_id", slotIds)
       );
     } catch {
@@ -204,7 +208,11 @@ export async function GET(req: Request) {
 
   const duplicateList: ListItem[] = attempts
     .filter((a) => a.result === "duplicado")
-    .map((a) => toItem(a.slot_id, a.cadet_id, a.scanned_at))
+    .map((a) => ({
+      ...toItem(a.slot_id, a.cadet_id, a.scanned_at),
+      flagged_person: a.flagged_person,
+      fiscal_note: a.fiscal_note,
+    }))
     .sort(byTimeDesc);
 
   // No-show: cadetes esperados que NUNCA passaram o QR no slot.

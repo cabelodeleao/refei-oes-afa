@@ -81,12 +81,14 @@ create table if not exists public.meal_entries (
 --   'duplicado' : passou o QR de novo na mesma refeição (2ª+ leitura)
 -- --------------------------------------------------------------------------
 create table if not exists public.scan_attempts (
-  id         uuid primary key default gen_random_uuid(),
-  cadet_id   uuid references public.cadets(id) on delete cascade,
-  slot_id    uuid not null references public.meal_slots(id) on delete cascade,
-  fiscal_id  uuid references public.cadets(id) on delete set null,
-  result     text not null check (result in ('autorizado', 'nao_marcou', 'duplicado')),
-  scanned_at timestamptz default now()
+  id             uuid primary key default gen_random_uuid(),
+  cadet_id       uuid references public.cadets(id) on delete cascade,
+  slot_id        uuid not null references public.meal_slots(id) on delete cascade,
+  fiscal_id      uuid references public.cadets(id) on delete set null,
+  result         text not null check (result in ('autorizado', 'nao_marcou', 'duplicado')),
+  flagged_person text,   -- pessoa real flagrada usando QR alheio (fraude)
+  fiscal_note    text,   -- observação livre do fiscal
+  scanned_at     timestamptz default now()
 );
 
 -- --------------------------------------------------------------------------

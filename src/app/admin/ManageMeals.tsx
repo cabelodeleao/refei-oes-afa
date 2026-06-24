@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MEAL_TYPES,
   MEAL_SHORT,
+  MEAL_ICONS,
   ALL_SQUADRONS,
   ACCESS_LABELS,
   getAccess,
@@ -46,14 +47,32 @@ function hasAnyAccess(m: AccessMap): boolean {
   return ALL_SQUADRONS.some((sq) => m[sq] !== "ninguem");
 }
 
-// Estilo + rótulo curto de cada estado, autoexplicativo (não precisa de legenda):
-//   Opcional -> azul "Opc" · Todos/obrigatório -> verde "Obr" · Ninguém -> cinza "—"
-const STATE_PILL: Record<AccessState, { cls: string; abbr: string }> = {
-  opcional: { cls: "bg-sky-500 text-white", abbr: "Opc" },
-  todos: { cls: "bg-emerald-600 text-white", abbr: "Obr" },
+// Estilo de cada estado: texto + ícone (forma distinta) + cor, com redundância
+// proposital para que o significado fique claro mesmo sem enxergar a cor
+// (daltônicos / quem nunca viu o sistema). Cores bem distintas entre si:
+//   Opcional -> azul escuro, ícone ✓  · Obrigatório -> verde vivo, ícone ★
+//   Ninguém  -> cinza, ícone ✕
+const STATE_PILL: Record<
+  AccessState,
+  { cls: string; icon: string; abbr: string; label: string }
+> = {
+  opcional: {
+    cls: "bg-blue-700 text-white",
+    icon: "✓",
+    abbr: "Opc",
+    label: "Opcional",
+  },
+  todos: {
+    cls: "bg-green-500 text-white",
+    icon: "★",
+    abbr: "Obr",
+    label: "Obrigatório",
+  },
   ninguem: {
-    cls: "bg-slate-200 text-slate-500 dark:bg-gray-600 dark:text-gray-300",
-    abbr: "—",
+    cls: "bg-slate-300 text-slate-700 dark:bg-gray-600 dark:text-gray-100",
+    icon: "✕",
+    abbr: "Não",
+    label: "Ninguém",
   },
 };
 
@@ -344,15 +363,17 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
 
 // ---------------------------------------------------------------------------
 
-// Badge autoexplicativo de um esquadrão: número + estado, com cor reforçando.
+// Badge autoexplicativo de um esquadrão: número + ícone + texto, com a cor só
+// reforçando. O tooltip mostra o significado por extenso ao passar o mouse.
 function SquadronBadge({ sq, state }: { sq: number; state: AccessState }) {
   const p = STATE_PILL[state];
   return (
     <span
-      className={`flex items-center justify-center gap-1 rounded px-1 py-0.5 text-[10px] font-bold leading-none ${p.cls}`}
-      title={`${sq}º Esq: ${ACCESS_LABELS[state]}`}
+      className={`flex items-center justify-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-bold leading-none ${p.cls}`}
+      title={`${sq}º Esquadrão: ${p.label}`}
     >
-      <span className="opacity-80">{sq}</span>
+      <span className="opacity-90">{sq}</span>
+      <span aria-hidden>{p.icon}</span>
       <span>{p.abbr}</span>
     </span>
   );
@@ -367,30 +388,34 @@ function AccessSelector({
   onChange: (v: AccessState) => void;
   disabled?: boolean;
 }) {
-  const options: { key: AccessState; active: string }[] = [
-    { key: "opcional", active: "bg-sky-500 text-white" },
-    { key: "todos", active: "bg-emerald-600 text-white" },
-    { key: "ninguem", active: "bg-slate-400 text-white" },
-  ];
+  // Mesmas cores/ícones dos badges do grid (consistência visual).
+  const options: AccessState[] = ["opcional", "todos", "ninguem"];
   return (
     <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-slate-300 dark:ring-gray-600">
-      {options.map((o, i) => (
-        <button
-          key={o.key}
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(o.key)}
-          className={`px-2.5 py-1 text-xs font-semibold transition disabled:opacity-40 ${
-            i > 0 ? "border-l border-slate-300 dark:border-gray-600" : ""
-          } ${
-            value === o.key
-              ? o.active
-              : "bg-white text-slate-500 hover:bg-slate-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-          }`}
-        >
-          {ACCESS_LABELS[o.key]}
-        </button>
-      ))}
+      {options.map((key, i) => {
+        const p = STATE_PILL[key];
+        return (
+          <button
+            key={key}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(key)}
+            title={p.label}
+            className={`px-2 py-1 text-xs font-semibold transition disabled:opacity-40 ${
+              i > 0 ? "border-l border-slate-300 dark:border-gray-600" : ""
+            } ${
+              value === key
+                ? p.cls
+                : "bg-white text-slate-500 hover:bg-slate-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+            }`}
+          >
+            <span aria-hidden className="mr-0.5">
+              {p.icon}
+            </span>
+            {ACCESS_LABELS[key]}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -697,43 +722,54 @@ function CreatePanel({
               </div>
             </div>
 
-            {MEAL_TYPES.map((mt) => (
-              <div
-                key={mt}
-                className={`rounded-xl border transition ${
-                  config[mt].enabled
-                    ? "border-navy-200 bg-navy-50/40 dark:border-navy-500/40 dark:bg-navy-500/10"
-                    : "border-slate-200 dark:border-gray-700"
-                }`}
-              >
-                <label className="flex cursor-pointer items-center gap-2 px-3 py-2 font-medium text-slate-700 dark:text-gray-200">
+            {/* Grade 2x2 de refeições: checkbox + nome, compacto. */}
+            <div className="grid grid-cols-2 gap-2">
+              {MEAL_TYPES.map((mt) => (
+                <label
+                  key={mt}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    config[mt].enabled
+                      ? "border-navy-300 bg-navy-50 text-navy-800 dark:border-navy-500/50 dark:bg-navy-500/15 dark:text-gray-100"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700/40"
+                  }`}
+                >
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-navy-600"
                     checked={config[mt].enabled}
                     onChange={(e) => setMeal(mt, { enabled: e.target.checked })}
                   />
+                  <span aria-hidden>{MEAL_ICONS[mt]}</span>
                   {MEAL_SHORT[mt]}
                 </label>
+              ))}
+            </div>
 
-                {config[mt].enabled && (
-                  <div className="grid grid-cols-1 gap-1.5 px-3 pb-3 sm:grid-cols-2">
-                    {ALL_SQUADRONS.map((sq) => (
-                      <div
-                        key={sq}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="text-xs text-slate-600 dark:text-gray-300">
-                          {sq}º Esq
-                        </span>
-                        <AccessSelector
-                          value={config[mt].access[sq]}
-                          onChange={(v) => setSquadron(mt, sq, v)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
+            {/* Acesso por esquadrão das refeições marcadas (expande abaixo). */}
+            {MEAL_TYPES.filter((mt) => config[mt].enabled).map((mt) => (
+              <div
+                key={mt}
+                className="rounded-xl border border-navy-200 bg-navy-50/40 p-2.5 animate-fade-in dark:border-navy-500/40 dark:bg-navy-500/10"
+              >
+                <p className="mb-1.5 text-xs font-semibold text-navy-700 dark:text-gray-200">
+                  {MEAL_ICONS[mt]} {MEAL_SHORT[mt]} — acesso por esquadrão
+                </p>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {ALL_SQUADRONS.map((sq) => (
+                    <div
+                      key={sq}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="text-xs text-slate-600 dark:text-gray-300">
+                        {sq}º Esq
+                      </span>
+                      <AccessSelector
+                        value={config[mt].access[sq]}
+                        onChange={(v) => setSquadron(mt, sq, v)}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

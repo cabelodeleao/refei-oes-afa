@@ -149,11 +149,13 @@ export async function GET(req: Request) {
     slot_id: string;
     result: "autorizado" | "nao_marcou" | "duplicado";
     scanned_at: string;
+    flagged_person: string | null;
+    fiscal_note: string | null;
   }> = [];
   try {
     attempts = await selectAll(
       "scan_attempts",
-      "id, cadet_id, slot_id, result, scanned_at",
+      "id, cadet_id, slot_id, result, scanned_at, flagged_person, fiscal_note",
       (q) => q.in("slot_id", slotIds)
     );
   } catch {
@@ -254,15 +256,23 @@ export async function GET(req: Request) {
     title: string,
     result: "nao_marcou" | "duplicado"
   ) {
+    const isDup = result === "duplicado";
     const sheet = wb.addWorksheet(title, {
       views: [{ state: "frozen", ySplit: 1 }],
     });
     sheet.columns = [
       { header: "Número", key: "number", width: 12 },
-      { header: "Nome", key: "name", width: 28 },
+      { header: isDup ? "Dono do QR" : "Nome", key: "name", width: 28 },
       { header: "Esquadrão", key: "squadron", width: 12 },
       { header: "Refeição", key: "meal", width: 14 },
       { header: "Horário", key: "time", width: 12 },
+      // Colunas extras só p/ duplicados (fraude de QR).
+      ...(isDup
+        ? [
+            { header: "Quem usou (flagrado)", key: "flagged", width: 26 },
+            { header: "Obs. do fiscal", key: "note", width: 30 },
+          ]
+        : []),
     ];
     styleHeaderRow(sheet.getRow(1));
     const rows = attempts
@@ -274,6 +284,9 @@ export async function GET(req: Request) {
         ...cadetCols(a.cadet_id),
         meal: meal ? MEAL_SHORT[meal] : "—",
         time: hhmm(a.scanned_at),
+        ...(isDup
+          ? { flagged: a.flagged_person ?? "", note: a.fiscal_note ?? "" }
+          : {}),
       });
     }
   }
