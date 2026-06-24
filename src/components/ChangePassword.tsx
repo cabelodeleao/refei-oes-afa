@@ -47,26 +47,23 @@ export default function ChangePassword() {
   }
 
   return (
-    <div className="card overflow-hidden">
+    <div className="flex flex-col items-center">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between px-5 py-4 text-left"
+        className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:text-slate-600 dark:text-gray-500 dark:hover:text-gray-300"
       >
-        <span className="flex items-center gap-2 font-semibold text-slate-700 dark:text-gray-200">
-          <span>🔒</span> Trocar senha
-        </span>
-        <span
-          className={`text-slate-400 transition-transform dark:text-gray-500 ${
-            open ? "rotate-180" : ""
-          }`}
-        >
+        <span>🔒</span> Trocar senha
+        <span className={`transition-transform ${open ? "rotate-180" : ""}`}>
           ▾
         </span>
       </button>
 
       {open && (
-        <form onSubmit={submit} className="space-y-3 border-t border-slate-100 px-5 py-4 animate-fade-in dark:border-gray-700">
+        <form
+          onSubmit={submit}
+          className="mt-3 w-full max-w-sm space-y-3 rounded-2xl bg-white p-4 shadow-card ring-1 ring-slate-200/70 animate-fade-in dark:bg-gray-800 dark:ring-gray-700"
+        >
           <input
             className="input"
             type="password"

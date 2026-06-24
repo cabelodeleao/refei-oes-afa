@@ -132,7 +132,7 @@ export default function CadeteClient({ user, qrToken }: Props) {
     <div className="min-h-[100dvh]">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-gradient-to-r from-navy-800 to-navy-600 text-white shadow-md">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3.5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3.5">
           <div className="min-w-0">
             <p className="truncate text-base font-bold leading-tight">
               {user.name}
@@ -148,10 +148,8 @@ export default function CadeteClient({ user, qrToken }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl space-y-4 px-4 py-5">
+      <main className="mx-auto max-w-5xl space-y-4 px-4 py-5 pb-24">
         <MenuBanner />
-
-        <MyQrCode token={qrToken} name={user.name} number={user.number} />
 
         <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
           Refeições
@@ -175,120 +173,108 @@ export default function CadeteClient({ user, qrToken }: Props) {
           </div>
         )}
 
-        {!loading &&
-          days.map(({ date, daySlots }, i) => (
-            <section
-              key={date}
-              className="card overflow-hidden animate-fade-in-up"
-              style={{ animationDelay: `${Math.min(i * 60, 360)}ms` }}
-            >
-              <div className="border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-5 py-3.5 dark:border-gray-700 dark:from-gray-700/40 dark:to-gray-800">
-                <h3 className="font-semibold capitalize text-navy-800 dark:text-gray-100">
-                  {formatLongDate(date)}
-                </h3>
-              </div>
-              <ul className="divide-y divide-slate-100 dark:divide-gray-700">
-                {MEAL_TYPES.filter((mt) =>
-                  daySlots.some((s) => s.meal_type === mt)
-                ).map((mt) => {
-                  const slot = daySlots.find((s) => s.meal_type === mt)!;
-                  // "todos" estrito (1º/2º) = obrigatória sem desmarcar.
-                  // "todos" opt-out (3º/4º) = pré-marcada, mas pode desmarcar.
-                  const strict = slot.access === "todos" && !optOut;
-                  const optOutMeal = slot.access === "todos" && optOut;
-                  return (
-                    <li
-                      key={slot.id}
-                      className={`flex items-center justify-between gap-4 px-5 py-4 transition-colors ${
-                        slot.locked
-                          ? "bg-slate-50 dark:bg-gray-700/30"
-                          : "hover:bg-slate-50/60 dark:hover:bg-gray-700/40"
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
+        {/* Grade responsiva de dias: 1 / 2 / 3 colunas. */}
+        {!loading && days.length > 0 && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {days.map(({ date, daySlots }, i) => (
+              <section
+                key={date}
+                className="card overflow-hidden animate-fade-in-up"
+                style={{ animationDelay: `${Math.min(i * 50, 360)}ms` }}
+              >
+                <div className="border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-3 py-2 dark:border-gray-700 dark:from-gray-700/40 dark:to-gray-800">
+                  <h3 className="text-sm font-semibold capitalize text-navy-800 dark:text-gray-100">
+                    {formatLongDate(date)}
+                  </h3>
+                </div>
+                <ul className="divide-y divide-slate-100 dark:divide-gray-700">
+                  {MEAL_TYPES.filter((mt) =>
+                    daySlots.some((s) => s.meal_type === mt)
+                  ).map((mt) => {
+                    const slot = daySlots.find((s) => s.meal_type === mt)!;
+                    // "todos" estrito (1º/2º) = obrigatória sem desmarcar.
+                    // "todos" opt-out (3º/4º) = pré-marcada, mas pode desmarcar.
+                    const strict = slot.access === "todos" && !optOut;
+                    const optOutMeal = slot.access === "todos" && optOut;
+                    return (
+                      <li
+                        key={slot.id}
+                        className={`flex items-center gap-2.5 px-3 py-2 transition-colors ${
+                          slot.locked
+                            ? "bg-slate-50 dark:bg-gray-700/30"
+                            : "hover:bg-slate-50/60 dark:hover:bg-gray-700/40"
+                        }`}
+                      >
                         <span
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg ring-1 ring-inset ${
-                            slot.locked
-                              ? "bg-slate-100 text-slate-300 ring-slate-200 dark:bg-gray-700 dark:text-gray-500 dark:ring-gray-600"
-                              : "bg-navy-50 ring-navy-100 dark:bg-gray-700 dark:ring-gray-600"
+                          className={`shrink-0 text-base leading-none ${
+                            slot.locked ? "opacity-50 grayscale" : ""
                           }`}
                           aria-hidden
                         >
                           {slot.locked ? "🔒" : MEAL_ICONS[mt]}
                         </span>
-                        <div className="min-w-0">
-                        <p
-                          className={`font-medium ${
-                            slot.locked
-                              ? "text-slate-400 dark:text-gray-500"
-                              : "text-slate-700 dark:text-gray-200"
-                          }`}
-                        >
-                          {MEAL_LABELS[mt]}
-                        </p>
-                        <p className="text-xs">
-                          {strict ? (
-                            <span className="font-semibold text-emerald-600">
-                              Obrigatória — todos do esquadrão
-                            </span>
-                          ) : slot.locked ? (
-                            <span className="text-slate-400">
-                              🔒 Bloqueado ·{" "}
-                              {slot.marked ? "você marcou Sim" : "você marcou Não"}
-                            </span>
+
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={`truncate text-sm font-medium leading-tight ${
+                              slot.locked
+                                ? "text-slate-400 dark:text-gray-500"
+                                : "text-slate-700 dark:text-gray-200"
+                            }`}
+                          >
+                            {MEAL_LABELS[mt]}
+                          </p>
+                          {slot.locked ? (
+                            <p className="text-[11px] leading-tight text-slate-400">
+                              Bloqueado · {slot.marked ? "Sim" : "Não"}
+                            </p>
                           ) : optOutMeal ? (
-                            <span
-                              className={
+                            <p
+                              className={`text-[11px] leading-tight ${
                                 slot.marked
-                                  ? "font-semibold text-emerald-600"
+                                  ? "text-emerald-600"
                                   : "font-medium text-amber-600"
-                              }
+                              }`}
                             >
                               {slot.marked
-                                ? "Obrigatória (você pode desmarcar)"
-                                : "Você desmarcou — não vai comer"}
-                            </span>
-                          ) : (
-                            <span
-                              className={
-                                slot.marked
-                                  ? "font-semibold text-emerald-600"
-                                  : "text-slate-400"
-                              }
-                            >
-                              {slot.marked ? "Sim" : "Não"}
-                            </span>
-                          )}
-                        </p>
+                                ? "Obrigatória (pode desmarcar)"
+                                : "Desmarcou — não vai comer"}
+                            </p>
+                          ) : null}
                         </div>
-                      </div>
-                      {strict ? (
-                        <span className="chip shrink-0 bg-emerald-100 px-2.5 py-1 text-emerald-700">
-                          Obrigatória
-                        </span>
-                      ) : (
-                        <Toggle
-                          on={slot.marked}
-                          disabled={slot.locked || pending.has(slot.id)}
-                          onChange={(next) => toggle(slot, next)}
-                          label={`${MEAL_LABELS[mt]} ${formatLongDate(date)}`}
-                        />
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
+
+                        {strict ? (
+                          <span className="chip shrink-0 bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                            Obrigatória
+                          </span>
+                        ) : (
+                          <Toggle
+                            on={slot.marked}
+                            disabled={slot.locked || pending.has(slot.id)}
+                            onChange={(next) => toggle(slot, next)}
+                            label={`${MEAL_LABELS[mt]} ${formatLongDate(date)}`}
+                          />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
 
         <div className="pt-2">
           <ChangePassword />
         </div>
 
-        <p className="pb-6 pt-2 text-center text-xs text-slate-400 dark:text-gray-600">
+        <p className="pt-2 text-center text-xs text-slate-400 dark:text-gray-600">
           Refeições AFA
         </p>
       </main>
+
+      {/* QR code: botão flutuante + modal em tela cheia */}
+      <MyQrCode token={qrToken} name={user.name} number={user.number} />
     </div>
   );
 }

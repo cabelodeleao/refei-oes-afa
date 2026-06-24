@@ -41,9 +41,9 @@ export default function MenuBanner() {
           onClick={() => setOpen(true)}
           className="block w-full text-left"
         >
-          <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-5 py-3 dark:border-gray-700 dark:from-gray-700/40 dark:to-gray-800">
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-4 py-2.5 dark:border-gray-700 dark:from-gray-700/40 dark:to-gray-800">
             <span aria-hidden>📋</span>
-            <h3 className="font-semibold text-navy-800 dark:text-gray-100">
+            <h3 className="text-sm font-semibold text-navy-800 dark:text-gray-100">
               {menu.title}
             </h3>
             <span className="ml-auto text-xs text-slate-400 dark:text-gray-500">
@@ -54,7 +54,7 @@ export default function MenuBanner() {
           <img
             src={menu.image_url}
             alt={menu.title}
-            className="max-h-80 w-full bg-slate-50 object-contain dark:bg-gray-900"
+            className="max-h-56 w-full bg-slate-50 object-contain dark:bg-gray-900"
           />
         </button>
       </section>
