@@ -152,7 +152,7 @@ export default function CadeteClient({ user, qrToken }: Props) {
         <MenuBanner />
 
         <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">
-          Refeições
+          Suas refeições
         </h2>
 
         {loading && (
@@ -176,16 +176,27 @@ export default function CadeteClient({ user, qrToken }: Props) {
         {/* Grade responsiva de dias: 1 / 2 / 3 colunas. */}
         {!loading && days.length > 0 && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {days.map(({ date, daySlots }, i) => (
+            {days.map(({ date, daySlots }, i) => {
+              const markedCount = daySlots.filter((s) => s.marked).length;
+              return (
               <section
                 key={date}
                 className="card overflow-hidden animate-fade-in-up"
                 style={{ animationDelay: `${Math.min(i * 50, 360)}ms` }}
               >
-                <div className="border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-3 py-2 dark:border-gray-700 dark:from-gray-700/40 dark:to-gray-800">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-gradient-to-r from-navy-50 to-white px-3 py-2 dark:border-gray-700 dark:from-gray-700/40 dark:to-gray-800">
                   <h3 className="text-sm font-semibold capitalize text-navy-800 dark:text-gray-100">
                     {formatLongDate(date)}
                   </h3>
+                  <span
+                    className={`chip shrink-0 px-2 py-0.5 text-[11px] font-semibold ${
+                      markedCount === 0
+                        ? "bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-gray-400"
+                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+                    }`}
+                  >
+                    {markedCount} {markedCount === 1 ? "marcada" : "marcadas"}
+                  </span>
                 </div>
                 <ul className="divide-y divide-slate-100 dark:divide-gray-700">
                   {MEAL_TYPES.filter((mt) =>
@@ -260,7 +271,8 @@ export default function CadeteClient({ user, qrToken }: Props) {
                   })}
                 </ul>
               </section>
-            ))}
+              );
+            })}
           </div>
         )}
 

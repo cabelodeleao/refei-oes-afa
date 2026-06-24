@@ -50,11 +50,13 @@ export default function MenuBanner() {
               toque para ampliar
             </span>
           </div>
+          {/* Imagem inteira visível no topo (largura total, altura proporcional).
+              Continua clicável para ampliar em tela cheia. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={menu.image_url}
             alt={menu.title}
-            className="max-h-56 w-full bg-slate-50 object-contain dark:bg-gray-900"
+            className="block h-auto w-full bg-slate-50 dark:bg-gray-900"
           />
         </button>
       </section>
