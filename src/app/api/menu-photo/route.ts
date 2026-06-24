@@ -1,16 +1,48 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 const BUCKET = "cardapios";
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-const ALLOWED: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB (limite do upload original)
+const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+// Otimização para economizar Storage (Supabase Free = 1 GB):
+//   redimensiona p/ no máx. 1200px de largura (sem ampliar) e converte p/ WebP.
+const MAX_WIDTH = 1200;
+const WEBP_QUALITY = 80;
+// Quantos cardápios manter no Storage (registro + arquivo); os mais antigos
+// são apagados automaticamente ao publicar um novo.
+const KEEP_MENUS = 3;
+
+// Apaga de verdade (registro + arquivo no Storage) os cardápios além dos
+// KEEP_MENUS mais recentes. Best-effort: falhas aqui não invalidam o publish.
+async function pruneOldMenus() {
+  const rows = await selectAll<{
+    id: string;
+    storage_path: string | null;
+    created_at: string;
+  }>("menu_photos", "id, storage_path, created_at");
+  rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const old = rows.slice(KEEP_MENUS);
+  if (old.length === 0) return;
+
+  const paths = old
+    .map((r) => r.storage_path)
+    .filter((p): p is string => Boolean(p));
+  if (paths.length > 0) {
+    await supabaseAdmin.storage.from(BUCKET).remove(paths);
+  }
+  await supabaseAdmin
+    .from("menu_photos")
+    .delete()
+    .in(
+      "id",
+      old.map((r) => r.id)
+    );
+}
 
 interface MenuRow {
   id: string;
@@ -88,8 +120,7 @@ export async function POST(req: Request) {
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "Selecione uma imagem" }, { status: 400 });
   }
-  const ext = ALLOWED[file.type];
-  if (!ext) {
+  if (!ALLOWED.has(file.type)) {
     return NextResponse.json(
       { error: "Formato inválido. Use JPG, PNG ou WEBP." },
       { status: 400 }
@@ -102,14 +133,29 @@ export async function POST(req: Request) {
     );
   }
 
-  // Upload no bucket. Caminho único para evitar colisões e cache obsoleto.
+  // Comprime/redimensiona no servidor antes de salvar (economiza Storage):
+  // máx. 1200px de largura, sem ampliar, e converte para WebP q80.
+  let optimized: Buffer;
+  try {
+    optimized = await sharp(Buffer.from(await file.arrayBuffer()))
+      .rotate() // respeita orientação EXIF antes de redimensionar
+      .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+      .webp({ quality: WEBP_QUALITY })
+      .toBuffer();
+  } catch {
+    return NextResponse.json(
+      { error: "Não foi possível processar a imagem." },
+      { status: 400 }
+    );
+  }
+
+  // Upload no bucket. Caminho único (sempre .webp) p/ evitar cache obsoleto.
   const rand = Math.random().toString(36).slice(2, 10);
-  const path = `${Date.now()}-${rand}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const path = `${Date.now()}-${rand}.webp`;
 
   const { error: upErr } = await supabaseAdmin.storage
     .from(BUCKET)
-    .upload(path, buffer, { contentType: file.type, upsert: false });
+    .upload(path, optimized, { contentType: "image/webp", upsert: false });
   if (upErr) {
     return NextResponse.json(
       { error: "Falha ao enviar a imagem: " + upErr.message },
@@ -138,6 +184,14 @@ export async function POST(req: Request) {
   if (insErr) {
     await supabaseAdmin.storage.from(BUCKET).remove([path]); // rollback
     return NextResponse.json({ error: "Erro ao salvar cardápio" }, { status: 500 });
+  }
+
+  // Limpeza dos cardápios antigos (registro + arquivo). Best-effort: se falhar,
+  // o publish já está concluído e não deve retornar erro.
+  try {
+    await pruneOldMenus();
+  } catch {
+    /* limpeza é best-effort */
   }
 
   return NextResponse.json({ menu: data });
