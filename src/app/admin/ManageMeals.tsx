@@ -190,9 +190,9 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Duas colunas no desktop: criar (esq.) | refeições criadas (dir.).
+      {/* Duas colunas no desktop: form estreito (esq.) | tabela larga (dir.).
           Uma coluna no mobile. */}
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
         <CreatePanel
           defaultFrom={from}
           defaultTo={to}
@@ -289,8 +289,8 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
             </button>
           </div>
 
-          {/* Tabela grid */}
-          <div className="overflow-x-auto">
+          {/* Grade MOBILE (tabela compacta com scroll) — escondida no desktop */}
+          <div className="overflow-x-auto lg:hidden">
             <table className="w-full min-w-[420px] border-collapse text-sm">
               <thead>
                 <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-gray-700/40 dark:text-gray-400">
@@ -339,6 +339,56 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Grade DESKTOP (cards largos, esquadrões por extenso) */}
+          <div className="hidden px-4 py-4 lg:block">
+            {/* Cabeçalho de colunas */}
+            <div className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))] gap-2.5 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
+              <div>Dia</div>
+              {MEAL_TYPES.map((mt) => (
+                <div key={mt}>{MEAL_SHORT[mt]}</div>
+              ))}
+            </div>
+
+            <div className="space-y-2.5">
+              {days.map((d) => (
+                <div
+                  key={d}
+                  className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))] gap-2.5"
+                >
+                  <div className="flex flex-col justify-center px-1">
+                    <div className="text-lg font-bold leading-tight text-navy-800 dark:text-gray-100">
+                      {formatShortDate(d)}
+                    </div>
+                    <div className="text-xs capitalize text-slate-400 dark:text-gray-500">
+                      {weekdayShort(d)}
+                    </div>
+                  </div>
+                  {MEAL_TYPES.map((mt) => {
+                    const slot = slotMap.get(`${d}|${mt}`);
+                    return (
+                      <DesktopCell
+                        key={mt}
+                        slot={slot}
+                        checked={slot ? selected.has(slot.id) : false}
+                        onToggleSelect={() => slot && toggleSelect(slot.id)}
+                        onClick={() =>
+                          setEditing({
+                            date: d,
+                            meal: mt,
+                            access: slot
+                              ? fullAccess(slot.squadrons)
+                              : uniformAccess("opcional"),
+                            existing: slot,
+                          })
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
 
           {loading && (
@@ -477,6 +527,95 @@ function GridCell({
       >
         {ALL_SQUADRONS.map((sq) => (
           <SquadronBadge key={sq} sq={sq} state={getAccess(slot.squadrons, sq)} />
+        ))}
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+// Linha de esquadrão POR EXTENSO (desktop): "Nº Esq — Estado", a cor reforça o
+// estado (verde = obrigatório, azul = opcional, cinza = ninguém). Como o nome
+// do esquadrão está escrito, não depende da cor para se identificar.
+const STATE_ROW: Record<AccessState, string> = {
+  todos:
+    "bg-emerald-50 text-emerald-700 ring-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/40",
+  opcional:
+    "bg-blue-50 text-blue-700 ring-blue-300 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/40",
+  ninguem:
+    "text-slate-400 ring-slate-200 dark:text-gray-500 dark:ring-gray-600",
+};
+
+function SquadronRow({ sq, state }: { sq: number; state: AccessState }) {
+  return (
+    <span
+      className={`flex items-center justify-between gap-1 rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ring-inset ${STATE_ROW[state]}`}
+      title={`${sq}º Esquadrão: ${STATE_PILL[state].label}`}
+    >
+      <span className="opacity-90">{sq}º Esq</span>
+      <span>{STATE_PILL[state].label}</span>
+    </span>
+  );
+}
+
+function DesktopCell({
+  slot,
+  checked,
+  onToggleSelect,
+  onClick,
+}: {
+  slot?: Slot;
+  checked: boolean;
+  onToggleSelect: () => void;
+  onClick: () => void;
+}) {
+  if (!slot) {
+    return (
+      <button
+        onClick={onClick}
+        className="flex min-h-[132px] w-full items-center justify-center rounded-xl border border-dashed border-slate-200 text-2xl text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300"
+        title="Criar refeição"
+      >
+        ＋
+      </button>
+    );
+  }
+  return (
+    <div
+      className={`flex h-full flex-col gap-2 rounded-xl border p-2.5 transition ${
+        slot.locked
+          ? "border-slate-200 bg-slate-50 dark:border-gray-600 dark:bg-gray-700/40"
+          : "border-slate-200 bg-white dark:border-gray-600 dark:bg-gray-700/60"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggleSelect}
+          className="h-4 w-4 accent-navy-600"
+          title="Selecionar"
+        />
+        {slot.locked ? (
+          <span className="text-sm" title="Bloqueado">
+            🔒
+          </span>
+        ) : (
+          <span
+            className="h-2 w-2 rounded-full bg-emerald-500"
+            title="Aberto"
+            aria-hidden
+          />
+        )}
+      </div>
+      <button
+        onClick={onClick}
+        className="flex flex-col gap-1 text-left"
+        title="Editar acesso dos esquadrões"
+      >
+        {ALL_SQUADRONS.map((sq) => (
+          <SquadronRow key={sq} sq={sq} state={getAccess(slot.squadrons, sq)} />
         ))}
       </button>
     </div>
@@ -722,8 +861,8 @@ function CreatePanel({
               </div>
             </div>
 
-            {/* Grade 2x2 de refeições: checkbox + nome, compacto. */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* Refeições: 2x2 no mobile, linhas finas empilhadas no desktop. */}
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
               {MEAL_TYPES.map((mt) => (
                 <label
                   key={mt}
@@ -754,11 +893,11 @@ function CreatePanel({
                 <p className="mb-1.5 text-xs font-semibold text-navy-700 dark:text-gray-200">
                   {MEAL_ICONS[mt]} {MEAL_SHORT[mt]} — acesso por esquadrão
                 </p>
-                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-1">
                   {ALL_SQUADRONS.map((sq) => (
                     <div
                       key={sq}
-                      className="flex items-center justify-between gap-2"
+                      className="flex flex-wrap items-center justify-between gap-1.5"
                     >
                       <span className="text-xs text-slate-600 dark:text-gray-300">
                         {sq}º Esq
