@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MEAL_TYPES,
   MEAL_SHORT,
@@ -208,11 +208,12 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
   }
 
   return (
-    // Meio-termo: aproveita bem a tela, mas com um teto p/ não esticar demais
-    // as células (e suas pílulas) em monitores largos.
-    <div className="space-y-4 2xl:max-w-[1600px]">
-      {/* Duas colunas no desktop: form (esq.) | tabela (dir.). Uma no mobile. */}
-      <div className="grid items-start gap-4 lg:grid-cols-[290px_minmax(0,1fr)]">
+    <div className="space-y-4">
+      {/* Desktop: form (290px, esq.) | tabela do tamanho do conteúdo (dir.).
+          A 2ª coluna é "auto" e o grid alinha à esquerda, então o bloco fica
+          compacto (sem esticar) e o espaço extra sobra como margem neutra à
+          direita. Uma coluna no mobile. */}
+      <div className="grid items-start gap-4 lg:grid-cols-[290px_auto] lg:justify-start">
         <CreatePanel
           defaultFrom={from}
           defaultTo={to}
@@ -374,26 +375,31 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
             </table>
           </div>
 
-          {/* Grade DESKTOP (esquadrões por extenso). Colunas flexíveis (1fr)
-              que se dividem igualmente pelo espaço disponível — as 4 refeições
-              cabem na tela sem scroll horizontal; minmax(0,1fr) deixa encolher. */}
-          <div className="hidden px-4 py-4 lg:block">
-            {/* Cabeçalho de colunas */}
-            <div className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))] gap-2.5 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
-              <div>Dia</div>
+          {/* Grade DESKTOP (esquadrões por extenso). UM único grid (cabeçalho +
+              linhas) com colunas do tamanho do CONTEÚDO (max-content): cada
+              refeição ocupa só a largura das pílulas, sem esticar nem deixar
+              vazio à direita, e cabeçalho/linhas ficam alinhados. overflow-x-
+              auto é só rede de segurança em telas muito estreitas. */}
+          <div className="hidden px-4 py-4 lg:block lg:overflow-x-auto">
+            <div className="grid w-max grid-cols-[60px_repeat(4,max-content)] gap-x-2.5 gap-y-2">
+              {/* Cabeçalho de colunas */}
+              <div className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
+                Dia
+              </div>
               {MEAL_TYPES.map((mt) => (
-                <div key={mt}>{MEAL_SHORT[mt]}</div>
+                <div
+                  key={mt}
+                  className="pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500"
+                >
+                  {MEAL_SHORT[mt]}
+                </div>
               ))}
-            </div>
 
-            <div className="space-y-2">
+              {/* Linhas (uma por dia) */}
               {days.map((d) => {
                 const dayIds = daySlotIds(d);
                 return (
-                  <div
-                    key={d}
-                    className="grid grid-cols-[72px_repeat(4,minmax(0,1fr))] gap-2.5"
-                  >
+                  <Fragment key={d}>
                     <div className="flex flex-col justify-center gap-1 px-1">
                       <DaySelectCheckbox
                         ids={dayIds}
@@ -429,7 +435,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
                         />
                       );
                     })}
-                  </div>
+                  </Fragment>
                 );
               })}
             </div>
