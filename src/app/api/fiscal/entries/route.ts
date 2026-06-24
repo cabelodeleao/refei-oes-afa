@@ -179,6 +179,13 @@ export async function GET(req: Request) {
     }
   }
 
+  // Uma refeição foi "fiscalizada" se houve QUALQUER atividade de leitura nela
+  // (entrada registrada ou tentativa de scan). Sem isso, não dá para tratar os
+  // esperados como faltas — ninguém escaneou ainda.
+  const fiscalizedSlots = new Set<string>();
+  for (const e of entries) fiscalizedSlots.add(e.slot_id);
+  for (const a of attempts) fiscalizedSlots.add(a.slot_id);
+
   const toItem = (
     slotId: string,
     cadetId: string | null,
@@ -230,9 +237,12 @@ export async function GET(req: Request) {
     })
     .sort(byTimeDesc);
 
-  // No-show: cadetes esperados que NUNCA passaram o QR no slot.
+  // Faltaram: cadetes esperados que NUNCA passaram o QR — apenas em refeições
+  // que foram fiscalizadas (senão estaríamos contando o efetivo inteiro como
+  // falta só porque a leitura ainda não começou).
   const noShowList: ListItem[] = [];
   for (const s of slots) {
+    if (!fiscalizedSlots.has(s.id)) continue;
     for (const c of cadets) {
       if (!isExpected(s, c)) continue;
       if (enteredSet.has(`${s.id}|${c.id}`)) continue;
@@ -260,15 +270,18 @@ export async function GET(req: Request) {
   const slotStats = slots.map((s) => {
     const expected = expectedOf(s);
     const entered = enteredCount.get(s.id) ?? 0;
+    const scanned = fiscalizedSlots.has(s.id);
     return {
       id: s.id,
       meal_type: s.meal_type,
       expected,
       entered,
-      no_show: Math.max(0, expected - entered),
+      // Só conta falta quando a refeição foi fiscalizada.
+      no_show: scanned ? Math.max(0, expected - entered) : 0,
       not_marked: notMarkedCount.get(s.id) ?? 0,
       duplicated: duplicateCount.get(s.id) ?? 0,
       no_qr: noQrCount.get(s.id) ?? 0,
+      scanned,
     };
   });
 

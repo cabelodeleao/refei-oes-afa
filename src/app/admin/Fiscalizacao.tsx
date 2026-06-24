@@ -19,6 +19,7 @@ interface SlotStat {
   not_marked: number;
   duplicated: number;
   no_qr: number;
+  scanned: boolean; // a refeição já foi fiscalizada (houve alguma leitura)?
 }
 
 interface ListItem {
@@ -55,28 +56,28 @@ const CATEGORIES: {
   },
   {
     key: "notMarked",
-    label: "Não marcaram mas foram",
-    short: "Não marcaram",
+    label: "Entraram sem marcar",
+    short: "Sem marcar",
     accent: "text-red-600",
     dot: "bg-red-500",
   },
   {
     key: "duplicates",
-    label: "Passaram QR mais de uma vez",
-    short: "QR 2x+",
+    label: "QR reutilizado",
+    short: "QR reutilizado",
     accent: "text-amber-600",
     dot: "bg-amber-500",
   },
   {
     key: "noShows",
-    label: "Marcaram mas não foram (no-show)",
-    short: "No-show",
+    label: "Faltaram",
+    short: "Faltaram",
     accent: "text-slate-500",
     dot: "bg-slate-400",
   },
   {
     key: "noQr",
-    label: "Tentaram sem QR",
+    label: "Sem QR",
     short: "Sem QR",
     accent: "text-purple-600",
     dot: "bg-purple-500",
@@ -219,41 +220,76 @@ export default function Fiscalizacao() {
 
       {/* Cards por refeição: filtro por refeição */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {slots.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setFilterSlot((cur) => (cur === s.id ? "" : s.id))}
-            className={`card p-4 text-left transition ${
-              filterSlot === s.id ? "ring-2 ring-navy-500" : ""
-            }`}
-          >
-            <p className="text-sm font-bold text-navy-800 dark:text-gray-100">
-              {MEAL_LABELS[s.meal_type]}
-            </p>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-2xl font-black text-emerald-600">
-                {s.entered}
-              </span>
-              <span className="text-sm text-slate-400">
-                / {s.expected} marcaram
-              </span>
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-              <span className="text-slate-500 dark:text-gray-400">
-                {s.no_show} no-show
-              </span>
-              {s.not_marked > 0 && (
-                <span className="text-red-600">{s.not_marked} s/ marcar</span>
+        {slots.map((s) => {
+          const pct =
+            s.expected > 0 ? Math.round((s.entered / s.expected) * 100) : null;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setFilterSlot((cur) => (cur === s.id ? "" : s.id))}
+              className={`card p-4 text-left transition ${
+                filterSlot === s.id ? "ring-2 ring-navy-500" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-bold text-navy-800 dark:text-gray-100">
+                  {MEAL_LABELS[s.meal_type]}
+                </p>
+                {s.duplicated > 0 && (
+                  <span title="QR reutilizado registrado — possível fraude">
+                    ⚠️
+                  </span>
+                )}
+              </div>
+
+              {s.scanned ? (
+                <div className="mt-2.5 space-y-1 text-sm">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-slate-500 dark:text-gray-400">
+                      Marcaram
+                    </span>
+                    <span className="font-semibold text-navy-800 dark:text-gray-100">
+                      {s.expected}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-medium text-emerald-600">
+                      Compareceram
+                    </span>
+                    <span className="font-bold text-emerald-600">
+                      {s.entered}
+                      {pct !== null && (
+                        <span className="ml-1 text-xs font-semibold opacity-80">
+                          ({pct}%)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-medium text-orange-600">Faltaram</span>
+                    <span className="font-bold text-orange-600">
+                      {s.no_show}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2.5 space-y-1 text-sm">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-slate-500 dark:text-gray-400">
+                      Marcaram
+                    </span>
+                    <span className="font-semibold text-navy-800 dark:text-gray-100">
+                      {s.expected}
+                    </span>
+                  </div>
+                  <p className="pt-0.5 text-xs italic text-slate-400 dark:text-gray-500">
+                    Sem fiscalização registrada
+                  </p>
+                </div>
               )}
-              {s.duplicated > 0 && (
-                <span className="text-amber-600">{s.duplicated} QR 2x+</span>
-              )}
-              {s.no_qr > 0 && (
-                <span className="text-purple-600">{s.no_qr} sem QR</span>
-              )}
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
         {!loading && slots.length === 0 && (
           <div className="card p-5 text-sm text-slate-400 dark:text-gray-500 sm:col-span-2 lg:col-span-4">
             Nenhuma refeição cadastrada neste dia.
@@ -294,11 +330,24 @@ export default function Fiscalizacao() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3 dark:border-gray-700">
-          <p className="text-xs text-slate-500 dark:text-gray-400">
-            {visibleItems.length}{" "}
-            {visibleItems.length === 1 ? "registro" : "registros"}
-            {filterSlot && " · filtrado por refeição (toque no card p/ limpar)"}
-          </p>
+          <div className="flex items-center gap-2">
+            {(() => {
+              const cat = CATEGORIES.find((c) => c.key === category)!;
+              return (
+                <span
+                  className={`inline-flex items-center gap-1.5 text-sm font-semibold ${cat.accent}`}
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full ${cat.dot}`} />
+                  {cat.label}
+                </span>
+              );
+            })()}
+            <span className="text-xs text-slate-400 dark:text-gray-500">
+              · {visibleItems.length}{" "}
+              {visibleItems.length === 1 ? "registro" : "registros"}
+              {filterSlot && " · filtrado por refeição (toque no card p/ limpar)"}
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

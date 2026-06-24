@@ -169,6 +169,11 @@ export async function GET(req: Request) {
     enteredSet.add(`${e.slot_id}|${e.cadet_id}`);
   }
 
+  // Refeição fiscalizada = teve alguma leitura (entrada ou tentativa de scan).
+  const fiscalizedSlots = new Set<string>();
+  for (const e of entries) fiscalizedSlots.add(e.slot_id);
+  for (const a of attempts) fiscalizedSlots.add(a.slot_id);
+
   const hhmm = (iso: string) =>
     new Date(iso).toLocaleString("pt-BR", {
       hour: "2-digit",
@@ -194,11 +199,12 @@ export async function GET(req: Request) {
   resumo.columns = [
     { header: "Refeição", key: "meal", width: 16 },
     { header: "Marcaram", key: "expected", width: 12 },
-    { header: "Entraram", key: "entered", width: 12 },
-    { header: "Não marcaram mas foram", key: "notmarked", width: 24 },
-    { header: "Passaram QR 2x+", key: "dup", width: 18 },
-    { header: "Tentaram sem QR", key: "noqr", width: 18 },
-    { header: "No-show (faltaram)", key: "noshow", width: 18 },
+    { header: "Compareceram", key: "entered", width: 14 },
+    { header: "Entraram sem marcar", key: "notmarked", width: 22 },
+    { header: "QR reutilizado", key: "dup", width: 16 },
+    { header: "Sem QR", key: "noqr", width: 14 },
+    { header: "Faltaram", key: "noshow", width: 14 },
+    { header: "Fiscalizada?", key: "fisc", width: 14 },
   ];
   styleHeaderRow(resumo.getRow(1));
 
@@ -217,6 +223,7 @@ export async function GET(req: Request) {
   for (const s of slots) {
     const expected = expectedOf(s);
     const entered = enteredCount.get(s.id) ?? 0;
+    const scanned = fiscalizedSlots.has(s.id);
     const row = resumo.addRow({
       meal: MEAL_SHORT[s.meal_type],
       expected,
@@ -224,9 +231,10 @@ export async function GET(req: Request) {
       notmarked: notMarkedCount.get(s.id) ?? 0,
       dup: duplicateCount.get(s.id) ?? 0,
       noqr: noQrCount.get(s.id) ?? 0,
-      noshow: Math.max(0, expected - entered),
+      noshow: scanned ? Math.max(0, expected - entered) : 0,
+      fisc: scanned ? "Sim" : "Não",
     });
-    [2, 3, 4, 5, 6, 7].forEach(
+    [2, 3, 4, 5, 6, 7, 8].forEach(
       (c) => (row.getCell(c).alignment = { horizontal: "center" })
     );
   }
@@ -295,11 +303,11 @@ export async function GET(req: Request) {
       });
     }
   }
-  attemptsSheet("Não marcaram mas foram", "nao_marcou");
-  attemptsSheet("Passaram QR 2x+", "duplicado");
+  attemptsSheet("Entraram sem marcar", "nao_marcou");
+  attemptsSheet("QR reutilizado", "duplicado");
 
-  // --- Aba "Tentaram sem QR" (registro manual do fiscal) ---
-  const noQrSheet = wb.addWorksheet("Tentaram sem QR", {
+  // --- Aba "Sem QR" (registro manual do fiscal) ---
+  const noQrSheet = wb.addWorksheet("Sem QR", {
     views: [{ state: "frozen", ySplit: 1 }],
   });
   noQrSheet.columns = [
@@ -327,8 +335,9 @@ export async function GET(req: Request) {
     });
   }
 
-  // --- Aba "No-show" (esperados que nunca passaram o QR) ---
-  const noShowSheet = wb.addWorksheet("No-show", {
+  // --- Aba "Faltaram" (esperados que nunca passaram o QR, só em refeições
+  //     fiscalizadas) ---
+  const noShowSheet = wb.addWorksheet("Faltaram", {
     views: [{ state: "frozen", ySplit: 1 }],
   });
   noShowSheet.columns = [
@@ -339,6 +348,7 @@ export async function GET(req: Request) {
   ];
   styleHeaderRow(noShowSheet.getRow(1));
   for (const s of slots) {
+    if (!fiscalizedSlots.has(s.id)) continue;
     for (const c of cadets) {
       if (!isExpected(s, c)) continue;
       if (enteredSet.has(`${s.id}|${c.id}`)) continue;
