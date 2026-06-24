@@ -147,7 +147,7 @@ export async function GET(req: Request) {
   let attempts: Array<{
     cadet_id: string | null;
     slot_id: string;
-    result: "autorizado" | "nao_marcou" | "duplicado";
+    result: "autorizado" | "nao_marcou" | "duplicado" | "sem_qr";
     scanned_at: string;
     flagged_person: string | null;
     fiscal_note: string | null;
@@ -197,17 +197,21 @@ export async function GET(req: Request) {
     { header: "Entraram", key: "entered", width: 12 },
     { header: "Não marcaram mas foram", key: "notmarked", width: 24 },
     { header: "Passaram QR 2x+", key: "dup", width: 18 },
+    { header: "Tentaram sem QR", key: "noqr", width: 18 },
     { header: "No-show (faltaram)", key: "noshow", width: 18 },
   ];
   styleHeaderRow(resumo.getRow(1));
 
   const notMarkedCount = new Map<string, number>();
   const duplicateCount = new Map<string, number>();
+  const noQrCount = new Map<string, number>();
   for (const a of attempts) {
     if (a.result === "nao_marcou")
       notMarkedCount.set(a.slot_id, (notMarkedCount.get(a.slot_id) ?? 0) + 1);
     else if (a.result === "duplicado")
       duplicateCount.set(a.slot_id, (duplicateCount.get(a.slot_id) ?? 0) + 1);
+    else if (a.result === "sem_qr")
+      noQrCount.set(a.slot_id, (noQrCount.get(a.slot_id) ?? 0) + 1);
   }
 
   for (const s of slots) {
@@ -219,9 +223,10 @@ export async function GET(req: Request) {
       entered,
       notmarked: notMarkedCount.get(s.id) ?? 0,
       dup: duplicateCount.get(s.id) ?? 0,
+      noqr: noQrCount.get(s.id) ?? 0,
       noshow: Math.max(0, expected - entered),
     });
-    [2, 3, 4, 5, 6].forEach(
+    [2, 3, 4, 5, 6, 7].forEach(
       (c) => (row.getCell(c).alignment = { horizontal: "center" })
     );
   }
@@ -292,6 +297,35 @@ export async function GET(req: Request) {
   }
   attemptsSheet("Não marcaram mas foram", "nao_marcou");
   attemptsSheet("Passaram QR 2x+", "duplicado");
+
+  // --- Aba "Tentaram sem QR" (registro manual do fiscal) ---
+  const noQrSheet = wb.addWorksheet("Tentaram sem QR", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  noQrSheet.columns = [
+    { header: "Cadete", key: "person", width: 30 },
+    { header: "Número", key: "number", width: 14 },
+    { header: "Esquadrão", key: "squadron", width: 12 },
+    { header: "Refeição", key: "meal", width: 14 },
+    { header: "Horário", key: "time", width: 12 },
+    { header: "Obs. do fiscal", key: "note", width: 30 },
+  ];
+  styleHeaderRow(noQrSheet.getRow(1));
+  const noQrRows = attempts
+    .filter((a) => a.result === "sem_qr")
+    .sort((a, b) => (a.scanned_at < b.scanned_at ? -1 : 1));
+  for (const a of noQrRows) {
+    const c = a.cadet_id ? cadetById.get(a.cadet_id) : undefined;
+    const meal = slotMeal.get(a.slot_id);
+    noQrSheet.addRow({
+      person: c?.name ?? a.flagged_person ?? "—",
+      number: c?.number ?? "—",
+      squadron: c ? SQUADRON_SHORT[c.squadron] ?? "—" : "—",
+      meal: meal ? MEAL_SHORT[meal] : "—",
+      time: hhmm(a.scanned_at),
+      note: a.fiscal_note ?? "",
+    });
+  }
 
   // --- Aba "No-show" (esperados que nunca passaram o QR) ---
   const noShowSheet = wb.addWorksheet("No-show", {

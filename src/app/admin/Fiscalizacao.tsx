@@ -18,6 +18,7 @@ interface SlotStat {
   no_show: number;
   not_marked: number;
   duplicated: number;
+  no_qr: number;
 }
 
 interface ListItem {
@@ -28,10 +29,15 @@ interface ListItem {
   squadron: number;
   at: string; // "" para no-show
   flagged_person?: string | null; // duplicados: pessoa flagrada (fraude)
-  fiscal_note?: string | null; // duplicados: observação do fiscal
+  fiscal_note?: string | null; // duplicados / sem QR: observação do fiscal
 }
 
-type Category = "entered" | "notMarked" | "duplicates" | "noShows";
+type Category =
+  | "entered"
+  | "notMarked"
+  | "duplicates"
+  | "noShows"
+  | "noQr";
 
 const CATEGORIES: {
   key: Category;
@@ -68,6 +74,13 @@ const CATEGORIES: {
     accent: "text-slate-500",
     dot: "bg-slate-400",
   },
+  {
+    key: "noQr",
+    label: "Tentaram sem QR",
+    short: "Sem QR",
+    accent: "text-purple-600",
+    dot: "bg-purple-500",
+  },
 ];
 
 function hhmm(iso: string): string {
@@ -85,6 +98,7 @@ export default function Fiscalizacao() {
     notMarked: [],
     duplicates: [],
     noShows: [],
+    noQr: [],
   });
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -103,10 +117,17 @@ export default function Fiscalizacao() {
           notMarked: data.notMarked ?? [],
           duplicates: data.duplicates ?? [],
           noShows: data.noShows ?? [],
+          noQr: data.noQr ?? [],
         });
       } else {
         setSlots([]);
-        setLists({ entered: [], notMarked: [], duplicates: [], noShows: [] });
+        setLists({
+          entered: [],
+          notMarked: [],
+          duplicates: [],
+          noShows: [],
+          noQr: [],
+        });
       }
     } finally {
       setLoading(false);
@@ -131,6 +152,7 @@ export default function Fiscalizacao() {
       notMarked: filter(lists.notMarked).length,
       duplicates: filter(lists.duplicates).length,
       noShows: filter(lists.noShows).length,
+      noQr: filter(lists.noQr).length,
     } as Record<Category, number>;
   }, [lists, filterSlot]);
 
@@ -161,9 +183,14 @@ export default function Fiscalizacao() {
   }
 
   const totalAll =
-    counts.entered + counts.notMarked + counts.duplicates + counts.noShows;
+    counts.entered +
+    counts.notMarked +
+    counts.duplicates +
+    counts.noShows +
+    counts.noQr;
   const showTime = category !== "noShows";
   const isDup = category === "duplicates";
+  const isNoQr = category === "noQr";
 
   return (
     <div className="space-y-5">
@@ -221,6 +248,9 @@ export default function Fiscalizacao() {
               {s.duplicated > 0 && (
                 <span className="text-amber-600">{s.duplicated} QR 2x+</span>
               )}
+              {s.no_qr > 0 && (
+                <span className="text-purple-600">{s.no_qr} sem QR</span>
+              )}
             </div>
           </button>
         ))}
@@ -274,7 +304,7 @@ export default function Fiscalizacao() {
         <div className="overflow-x-auto">
           <table
             className={`w-full border-collapse text-sm ${
-              isDup ? "min-w-[760px]" : "min-w-[520px]"
+              isDup ? "min-w-[760px]" : isNoQr ? "min-w-[620px]" : "min-w-[520px]"
             }`}
           >
             <thead>
@@ -295,6 +325,9 @@ export default function Fiscalizacao() {
                     </th>
                     <th className="px-3 py-3 text-left font-semibold">Obs.</th>
                   </>
+                )}
+                {isNoQr && (
+                  <th className="px-3 py-3 text-left font-semibold">Obs.</th>
                 )}
               </tr>
             </thead>
@@ -346,13 +379,20 @@ export default function Fiscalizacao() {
                         </td>
                       </>
                     )}
+                    {isNoQr && (
+                      <td className="px-3 py-2.5 text-slate-500 dark:text-gray-400">
+                        {e.fiscal_note || (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
               {!loading && visibleItems.length === 0 && (
                 <tr>
                   <td
-                    colSpan={(showTime ? 5 : 4) + (isDup ? 2 : 0)}
+                    colSpan={(showTime ? 5 : 4) + (isDup ? 2 : 0) + (isNoQr ? 1 : 0)}
                     className="px-4 py-8 text-center text-slate-400 dark:text-gray-500"
                   >
                     Nenhum registro nesta categoria.

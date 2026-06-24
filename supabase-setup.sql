@@ -85,7 +85,7 @@ create table if not exists public.scan_attempts (
   cadet_id       uuid references public.cadets(id) on delete cascade,
   slot_id        uuid not null references public.meal_slots(id) on delete cascade,
   fiscal_id      uuid references public.cadets(id) on delete set null,
-  result         text not null check (result in ('autorizado', 'nao_marcou', 'duplicado')),
+  result         text not null check (result in ('autorizado', 'nao_marcou', 'duplicado', 'sem_qr')),
   flagged_person text,   -- pessoa real flagrada usando QR alheio (fraude)
   fiscal_note    text,   -- observação livre do fiscal
   scanned_at     timestamptz default now()

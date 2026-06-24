@@ -15,6 +15,21 @@ interface Slot {
   entered: number;
 }
 
+interface Cadet {
+  id: string;
+  number: string;
+  name: string;
+  squadron: number;
+}
+
+// normaliza texto p/ busca (minúsculo, sem acentos)
+function norm(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
 type ScanStatus = "autorizado" | "negado" | "ja_registrado" | "invalido";
 
 interface ScanResult {
@@ -96,6 +111,9 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
   const [count, setCount] = useState(0);
   const [recent, setRecent] = useState<RecentItem[]>([]);
 
+  // Lista de cadetes para o autocomplete (anotações da fiscalização).
+  const [cadets, setCadets] = useState<Cadet[]>([]);
+
   // Anotação de fraude de QR (leitura duplicada).
   const [flagTarget, setFlagTarget] = useState<FlagTarget | null>(null);
   const [flagPerson, setFlagPerson] = useState("");
@@ -103,6 +121,15 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
   const [flagBusy, setFlagBusy] = useState(false);
   const [flagDone, setFlagDone] = useState(false);
   const [flagError, setFlagError] = useState("");
+
+  // Registro manual de entrada SEM QR.
+  const [noqrOpen, setNoqrOpen] = useState(false);
+  const [noqrPerson, setNoqrPerson] = useState("");
+  const [noqrPickedId, setNoqrPickedId] = useState<string | null>(null);
+  const [noqrNote, setNoqrNote] = useState("");
+  const [noqrBusy, setNoqrBusy] = useState(false);
+  const [noqrDone, setNoqrDone] = useState(false);
+  const [noqrError, setNoqrError] = useState("");
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const busyRef = useRef(false); // ignora leituras enquanto um resultado é exibido
@@ -127,6 +154,19 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
     })();
   }, []);
 
+  // Carrega a lista de cadetes (para o autocomplete das anotações).
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiFetch("/api/fiscal/cadets");
+        const data = await res.json();
+        if (res.ok) setCadets(data.cadets ?? []);
+      } catch {
+        /* autocomplete é opcional: ignora falha */
+      }
+    })();
+  }, []);
+
   // Ao escolher a refeição, inicializa o contador com o total já registrado.
   function selectSlot(id: string) {
     setSlotId(id);
@@ -134,6 +174,47 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
     setCount(s?.entered ?? 0);
     setRecent([]);
     setFlagTarget(null);
+    resetNoqr();
+  }
+
+  function resetNoqr() {
+    setNoqrPerson("");
+    setNoqrPickedId(null);
+    setNoqrNote("");
+    setNoqrDone(false);
+    setNoqrError("");
+  }
+
+  async function submitNoqr() {
+    if (!slotId) return;
+    if (!noqrPerson.trim()) {
+      setNoqrError("Informe o nome ou número do cadete.");
+      return;
+    }
+    setNoqrBusy(true);
+    setNoqrError("");
+    try {
+      const res = await apiFetch("/api/fiscal/no-qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slot_id: slotId,
+          person: noqrPerson,
+          cadet_id: noqrPickedId,
+          note: noqrNote,
+        }),
+      });
+      if (res.ok) {
+        setNoqrDone(true);
+      } else {
+        const data = await res.json().catch(() => null);
+        setNoqrError(data?.error ?? "Não foi possível registrar.");
+      }
+    } catch {
+      setNoqrError("Erro de conexão.");
+    } finally {
+      setNoqrBusy(false);
+    }
   }
 
   const stopScanner = useCallback(async () => {
@@ -430,8 +511,8 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
 
         {/* Anotação de fraude: QR já usado, possivelmente por outra pessoa */}
         {flagTarget && (
-          <section className="card overflow-hidden border-l-4 border-amber-500 animate-fade-in">
-            <div className="bg-amber-50 px-5 py-3 dark:bg-amber-500/10">
+          <section className="card border-l-4 border-amber-500 animate-fade-in">
+            <div className="rounded-t-2xl bg-amber-50 px-5 py-3 dark:bg-amber-500/10">
               <h3 className="flex items-center gap-2 text-sm font-bold text-amber-700 dark:text-amber-300">
                 ⚠ QR já usado
               </h3>
@@ -462,11 +543,11 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
                   <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
                     Quem está usando este QR? (nome ou número)
                   </label>
-                  <input
-                    className="input"
-                    placeholder="Ex: 26/1234 João Silva"
+                  <CadetSuggest
                     value={flagPerson}
-                    onChange={(e) => setFlagPerson(e.target.value)}
+                    onChange={(text) => setFlagPerson(text)}
+                    cadets={cadets}
+                    placeholder="Digite o nome ou número…"
                   />
                 </div>
                 <div>
@@ -501,6 +582,90 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
                     Ignorar
                   </button>
                 </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Registro manual: cadete que tentou entrar SEM QR */}
+        {selectedSlot && (
+          <section className="card">
+            <button
+              type="button"
+              onClick={() => setNoqrOpen((o) => !o)}
+              className="flex w-full items-center justify-between rounded-t-2xl px-5 py-3 text-left"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold text-navy-800 dark:text-gray-100">
+                ➕ Registrar entrada sem QR
+              </span>
+              <span
+                className={`text-slate-400 transition-transform ${
+                  noqrOpen ? "rotate-180" : ""
+                }`}
+              >
+                ▾
+              </span>
+            </button>
+
+            {noqrOpen && (
+              <div className="border-t border-slate-100 px-5 py-4 dark:border-gray-700">
+                {noqrDone ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-emerald-600">
+                      ✓ Registrado.
+                    </p>
+                    <button
+                      className="btn-secondary px-3 py-1.5 text-sm"
+                      onClick={resetNoqr}
+                    >
+                      Registrar outro
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-500 dark:text-gray-400">
+                      Para quem tentou entrar sem nenhum QR. Anote o cadete para
+                      apuração.
+                    </p>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                        Cadete (nome ou número)
+                      </label>
+                      <CadetSuggest
+                        value={noqrPerson}
+                        onChange={(text, cadet) => {
+                          setNoqrPerson(text);
+                          setNoqrPickedId(cadet?.id ?? null);
+                        }}
+                        cadets={cadets}
+                        placeholder="Digite o nome ou número…"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                        Observação (opcional)
+                      </label>
+                      <input
+                        className="input"
+                        placeholder="Detalhes da ocorrência"
+                        value={noqrNote}
+                        onChange={(e) => setNoqrNote(e.target.value)}
+                      />
+                    </div>
+                    {noqrError && (
+                      <p className="text-sm text-red-600 dark:text-red-400">
+                        {noqrError}
+                      </p>
+                    )}
+                    <button
+                      className="btn-primary w-full"
+                      onClick={submitNoqr}
+                      disabled={noqrBusy}
+                    >
+                      {noqrBusy ? "Registrando…" : "Registrar entrada sem QR"}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -549,6 +714,72 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
           </section>
         )}
       </main>
+    </div>
+  );
+}
+
+// Input com autocomplete de cadetes: ao digitar nome/número, sugere a lista.
+// onChange recebe o texto e (quando o fiscal escolhe da lista) o cadete.
+function CadetSuggest({
+  value,
+  onChange,
+  cadets,
+  placeholder,
+}: {
+  value: string;
+  onChange: (text: string, cadet: Cadet | null) => void;
+  cadets: Cadet[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const q = norm(value.trim());
+  const matches =
+    q.length >= 1
+      ? cadets
+          .filter(
+            (c) => c.number.toLowerCase().includes(q) || norm(c.name).includes(q)
+          )
+          .slice(0, 8)
+      : [];
+
+  return (
+    <div className="relative">
+      <input
+        className="input"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value, null);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        autoComplete="off"
+      />
+      {open && matches.length > 0 && (
+        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-800">
+          {matches.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-gray-700"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onChange(`${c.number} ${c.name}`, c);
+                  setOpen(false);
+                }}
+              >
+                <span className="min-w-0 flex-1 truncate font-medium text-slate-700 dark:text-gray-200">
+                  {c.name}
+                </span>
+                <span className="shrink-0 font-mono text-xs text-slate-400">
+                  {c.number}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

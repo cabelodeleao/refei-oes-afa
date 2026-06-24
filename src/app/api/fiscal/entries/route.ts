@@ -162,7 +162,7 @@ export async function GET(req: Request) {
   let attempts: Array<{
     cadet_id: string | null;
     slot_id: string;
-    result: "autorizado" | "nao_marcou" | "duplicado";
+    result: "autorizado" | "nao_marcou" | "duplicado" | "sem_qr";
     scanned_at: string;
     flagged_person: string | null;
     fiscal_note: string | null;
@@ -215,6 +215,21 @@ export async function GET(req: Request) {
     }))
     .sort(byTimeDesc);
 
+  // Sem QR: registro manual feito pelo fiscal (pessoa sem nenhum QR).
+  const noQrList: ListItem[] = attempts
+    .filter((a) => a.result === "sem_qr")
+    .map((a) => {
+      const base = toItem(a.slot_id, a.cadet_id, a.scanned_at);
+      return {
+        ...base,
+        // Sem cadete vinculado: usa o texto digitado pelo fiscal como nome.
+        name: a.cadet_id ? base.name : a.flagged_person || "—",
+        flagged_person: a.flagged_person,
+        fiscal_note: a.fiscal_note,
+      };
+    })
+    .sort(byTimeDesc);
+
   // No-show: cadetes esperados que NUNCA passaram o QR no slot.
   const noShowList: ListItem[] = [];
   for (const s of slots) {
@@ -237,6 +252,10 @@ export async function GET(req: Request) {
   for (const a of duplicateList) {
     duplicateCount.set(a.slot_id, (duplicateCount.get(a.slot_id) ?? 0) + 1);
   }
+  const noQrCount = new Map<string, number>();
+  for (const a of noQrList) {
+    noQrCount.set(a.slot_id, (noQrCount.get(a.slot_id) ?? 0) + 1);
+  }
 
   const slotStats = slots.map((s) => {
     const expected = expectedOf(s);
@@ -249,6 +268,7 @@ export async function GET(req: Request) {
       no_show: Math.max(0, expected - entered),
       not_marked: notMarkedCount.get(s.id) ?? 0,
       duplicated: duplicateCount.get(s.id) ?? 0,
+      no_qr: noQrCount.get(s.id) ?? 0,
     };
   });
 
@@ -259,5 +279,6 @@ export async function GET(req: Request) {
     notMarked: notMarkedList,
     duplicates: duplicateList,
     noShows: noShowList,
+    noQr: noQrList,
   });
 }
