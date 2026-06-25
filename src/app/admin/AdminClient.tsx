@@ -10,6 +10,7 @@ import MenuManager from "./MenuManager";
 import Cadets from "./Cadets";
 import Fiscalizacao from "./Fiscalizacao";
 import Fiscais from "./Fiscais";
+import Backup from "./Backup";
 import { toISODate, startOfWeek, addDays } from "@/lib/dates";
 
 interface Props {
@@ -22,7 +23,8 @@ type Tab =
   | "fiscalizacao"
   | "cardapio"
   | "cadetes"
-  | "fiscais";
+  | "fiscais"
+  | "backup";
 
 function parseTab(v: string | null): Tab {
   if (
@@ -30,7 +32,8 @@ function parseTab(v: string | null): Tab {
     v === "fiscalizacao" ||
     v === "cardapio" ||
     v === "cadetes" ||
-    v === "fiscais"
+    v === "fiscais" ||
+    v === "backup"
   )
     return v;
   return "gerenciar";
@@ -154,6 +157,12 @@ export default function AdminClient({ user }: Props) {
             >
               Fiscais
             </TabButton>
+            <TabButton
+              active={tab === "backup"}
+              onClick={() => setTab("backup")}
+            >
+              Backup
+            </TabButton>
           </nav>
         </div>
       </header>
@@ -169,8 +178,10 @@ export default function AdminClient({ user }: Props) {
           <MenuManager />
         ) : tab === "cadetes" ? (
           <Cadets />
-        ) : (
+        ) : tab === "fiscais" ? (
           <Fiscais />
+        ) : (
+          <Backup />
         )}
       </main>
     </div>
