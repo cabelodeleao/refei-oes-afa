@@ -689,16 +689,10 @@ function DesktopCell({
           className="h-4 w-4 accent-navy-600"
           title="Selecionar"
         />
-        {slot.locked ? (
+        {slot.locked && (
           <span className="text-sm" title="Bloqueado">
             🔒
           </span>
-        ) : (
-          <span
-            className="h-2 w-2 rounded-full bg-emerald-500"
-            title="Aberto"
-            aria-hidden
-          />
         )}
       </div>
       <button
