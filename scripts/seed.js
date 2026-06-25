@@ -49,6 +49,7 @@ async function main() {
       squadron: 0,
       is_admin: true,
       password_hash: passwordHash,
+      must_change_password: false, // admin não é forçado a trocar a senha
     },
     ...cadets.map((c) => ({
       number: c.number,
@@ -57,6 +58,7 @@ async function main() {
       is_admin: false,
       password_hash: passwordHash,
       qr_token: newQrToken(),
+      must_change_password: true, // cadetes trocam a senha padrão no 1º acesso
     })),
   ];
 

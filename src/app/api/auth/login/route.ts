@@ -41,7 +41,9 @@ export async function POST(req: Request) {
 
   const { data: cadet, error } = await supabaseAdmin
     .from("cadets")
-    .select("id, number, name, squadron, password_hash, is_admin, is_fiscal")
+    .select(
+      "id, number, name, squadron, password_hash, is_admin, is_fiscal, must_change_password"
+    )
     .eq("number", number)
     .maybeSingle();
 
@@ -68,6 +70,9 @@ export async function POST(req: Request) {
   // Login bem-sucedido: zera o contador.
   reset(rlKey);
 
+  // Admin nunca é forçado a trocar a senha; cadetes/fiscais sim, no 1º acesso.
+  const mustChange = Boolean(cadet.must_change_password) && !cadet.is_admin;
+
   const token = await signSession({
     sub: cadet.id,
     number: cadet.number,
@@ -75,13 +80,16 @@ export async function POST(req: Request) {
     squadron: cadet.squadron,
     is_admin: cadet.is_admin,
     is_fiscal: cadet.is_fiscal ?? false,
+    must_change_password: mustChange,
   });
 
-  const redirect = cadet.is_admin
-    ? "/admin"
-    : cadet.is_fiscal
-      ? "/fiscal"
-      : "/cadete";
+  const redirect = mustChange
+    ? "/trocar-senha"
+    : cadet.is_admin
+      ? "/admin"
+      : cadet.is_fiscal
+        ? "/fiscal"
+        : "/cadete";
 
   const res = NextResponse.json({
     name: cadet.name,

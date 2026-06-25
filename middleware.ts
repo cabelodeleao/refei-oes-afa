@@ -27,6 +27,34 @@ export async function middleware(req: NextRequest) {
 
   const isFiscal = Boolean(session.is_fiscal || session.is_admin);
 
+  // Troca de senha obrigatória (1º acesso de cadetes/fiscais; admin nunca).
+  // Enquanto pendente, o usuário só acessa a tela de troca e as rotas
+  // estritamente necessárias para concluí-la (trocar senha / sair).
+  const mustChange = Boolean(session.must_change_password) && !session.is_admin;
+  const changePwAllowed =
+    pathname === "/trocar-senha" ||
+    pathname === "/api/auth/change-password" ||
+    pathname === "/api/auth/logout";
+
+  if (mustChange && !changePwAllowed) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Troca de senha obrigatória" },
+        { status: 403 }
+      );
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = "/trocar-senha";
+    return NextResponse.redirect(url);
+  }
+
+  // Quem já trocou (ou o admin) não fica preso na tela de troca obrigatória.
+  if (!mustChange && pathname === "/trocar-senha") {
+    const url = req.nextUrl.clone();
+    url.pathname = session.is_admin ? "/admin" : isFiscal ? "/fiscal" : "/cadete";
+    return NextResponse.redirect(url);
+  }
+
   // Controle de acesso por papel nas páginas
   if (pathname.startsWith("/admin") && !session.is_admin) {
     const url = req.nextUrl.clone();
@@ -66,6 +94,7 @@ export const config = {
     "/cadete/:path*",
     "/admin/:path*",
     "/fiscal/:path*",
+    "/trocar-senha",
     "/api/slots/:path*",
     "/api/marks/:path*",
     "/api/menu-photo/:path*",

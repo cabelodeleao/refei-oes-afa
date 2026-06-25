@@ -87,6 +87,8 @@ export async function POST(req: Request) {
       is_admin: false,
       is_fiscal: true,
       password_hash: passwordHash,
+      // Senha padrão => força a troca no 1º acesso; senha custom => não força.
+      must_change_password: password === DEFAULT_PASSWORD,
     })
     .select("id, number, name")
     .single();

@@ -9,6 +9,8 @@ export interface SessionUser extends JWTPayload {
   squadron: number;
   is_admin: boolean;
   is_fiscal: boolean;
+  // true => precisa trocar a senha padrão antes de usar o sistema (1º acesso).
+  must_change_password: boolean;
 }
 
 const encoder = new TextEncoder();
@@ -26,6 +28,7 @@ export interface SessionInput {
   squadron: number;
   is_admin: boolean;
   is_fiscal: boolean;
+  must_change_password: boolean;
 }
 
 export async function signSession(user: SessionInput): Promise<string> {
@@ -35,6 +38,7 @@ export async function signSession(user: SessionInput): Promise<string> {
     squadron: user.squadron,
     is_admin: user.is_admin,
     is_fiscal: user.is_fiscal,
+    must_change_password: user.must_change_password,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.sub)

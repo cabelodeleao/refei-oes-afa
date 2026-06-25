@@ -18,6 +18,7 @@ create table if not exists public.cadets (
   is_admin      boolean default false,
   is_fiscal     boolean default false,       -- conta que fiscaliza o rancho (QR)
   qr_token      text unique,                 -- token secreto do QR do cadete
+  must_change_password boolean not null default true, -- força troca da senha padrão no 1º acesso
   created_at    timestamptz default now()
 );
 

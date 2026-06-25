@@ -47,10 +47,11 @@ export async function POST(req: Request) {
     );
   }
 
+  // Volta para a senha padrão e força a troca no próximo login do cadete.
   const newHash = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
   const { error: updErr } = await supabaseAdmin
     .from("cadets")
-    .update({ password_hash: newHash })
+    .update({ password_hash: newHash, must_change_password: true })
     .eq("id", cadet.id);
 
   if (updErr) {
