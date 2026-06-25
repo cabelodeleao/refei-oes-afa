@@ -11,6 +11,7 @@ import Cadets from "./Cadets";
 import Fiscalizacao from "./Fiscalizacao";
 import Fiscais from "./Fiscais";
 import Backup from "./Backup";
+import AdminChangePassword from "./AdminChangePassword";
 import { toISODate, startOfWeek, addDays } from "@/lib/dates";
 
 interface Props {
@@ -120,6 +121,7 @@ export default function AdminClient({ user }: Props) {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <ThemeToggle />
+              <AdminChangePassword />
               <LogoutButton />
             </div>
           </div>
