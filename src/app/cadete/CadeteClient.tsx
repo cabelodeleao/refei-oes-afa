@@ -204,8 +204,10 @@ export default function CadeteClient({ user, qrToken }: Props) {
             const clickable =
               !slot.locked && (slot.access === "opcional" || optOut);
 
+            // Bloqueada: além do cadeado, a cor identifica a escolha
+            // (verde = marcada "Sim", vermelho = "Não").
             const stateClass = slot.locked
-              ? "blocked"
+              ? `blocked ${slot.marked ? "blocked-yes" : "blocked-no"}`
               : strict
               ? "lock"
               : slot.marked
@@ -213,7 +215,9 @@ export default function CadeteClient({ user, qrToken }: Props) {
               : "off";
 
             const right = slot.locked ? (
-              <span className="cad-pill-muted">
+              <span
+                className={slot.marked ? "cad-pill-lock-yes" : "cad-pill-lock-no"}
+              >
                 🔒 {slot.marked ? "Sim" : "Não"}
               </span>
             ) : strict ? (

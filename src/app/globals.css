@@ -401,6 +401,18 @@ body {
   color: #7c8696;
   cursor: not-allowed;
 }
+/* Bloqueada, mas com a escolha identificável pela cor (verde = vai comer,
+   vermelho = não vai), além do texto "Sim"/"Não" na pílula. */
+.cad-meal.blocked-yes {
+  background: rgba(20, 180, 140, 0.06);
+  border-color: rgba(20, 180, 140, 0.25);
+  color: #aab4c4;
+}
+.cad-meal.blocked-no {
+  background: rgba(255, 90, 90, 0.05);
+  border-color: rgba(255, 90, 90, 0.22);
+  color: #9aa2b1;
+}
 .cad-meal.off .cad-meal-ic {
   background: rgba(255, 255, 255, 0.05);
 }
@@ -442,6 +454,19 @@ body {
   font-size: 11.5px;
   font-weight: 600;
   color: #7c8696;
+  white-space: nowrap;
+}
+/* Pílula "🔒 Sim" (verde) / "🔒 Não" (vermelha) das refeições bloqueadas. */
+.cad-pill-lock-yes {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #5fd0a0;
+  white-space: nowrap;
+}
+.cad-pill-lock-no {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ff9a9a;
   white-space: nowrap;
 }
 .cad-foot {
