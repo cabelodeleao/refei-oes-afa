@@ -23,6 +23,9 @@ interface SlotRow {
 }
 
 // GET /api/slots?from=YYYY-MM-DD&to=YYYY-MM-DD
+//   ?history=1 (cadete) — em vez das refeições atuais, retorna as dos ÚLTIMOS
+//   7 DIAS (somente consulta: tudo vem com locked=true; o PUT /api/marks
+//   também rejeita alterações em dias passados).
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) {
@@ -32,15 +35,15 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const history = searchParams.get("history") === "1";
 
-  // Refeições passadas somem para o cadete 1 dia após a data delas: ele vê até
-  // o dia seguinte (data >= ontem). O cálculo de "hoje" usa o fuso de São Paulo
-  // e a comparação é por data (YYYY-MM-DD ordena lexicograficamente). O slot não
-  // é apagado — apenas fica oculto para o cadete (o admin continua vendo tudo).
-  // O corte é aplicado NA QUERY: o cadete não carrega o histórico inteiro,
-  // que só cresce com o tempo.
+  // Visão do cadete (aplicada NA QUERY, para não carregar o histórico inteiro,
+  // que só cresce com o tempo). Datas no fuso de São Paulo; a comparação é por
+  // string (YYYY-MM-DD ordena lexicograficamente). O admin continua vendo tudo.
+  //   - normal:  refeições de hoje em diante
+  //   - history: refeições dos últimos 7 dias (de hoje-7 até ontem)
   const today = todaySaoPaulo();
-  const cutoff = toISODate(addDays(parseISODate(today), -1));
+  const histFrom = toISODate(addDays(parseISODate(today), -7));
   const isCadet = !session.is_admin;
 
   // Paginado: o total de slots cresce com o tempo, podendo passar de 1000.
@@ -52,7 +55,11 @@ export async function GET(req: Request) {
       (q) => {
         if (from) q = q.gte("date", from);
         if (to) q = q.lte("date", to);
-        if (isCadet) q = q.gte("date", cutoff);
+        if (isCadet) {
+          q = history
+            ? q.gte("date", histFrom).lt("date", today)
+            : q.gte("date", today);
+        }
         return q;
       }
     );
@@ -80,7 +87,12 @@ export async function GET(req: Request) {
     const marks = await selectAll<{ slot_id: string; attending: boolean }>(
       "meal_marks",
       "id, slot_id, attending, meal_slots!inner(date)",
-      (q) => q.eq("cadet_id", session.sub).gte("meal_slots.date", cutoff)
+      (q) => {
+        q = q.eq("cadet_id", session.sub);
+        return history
+          ? q.gte("meal_slots.date", histFrom).lt("meal_slots.date", today)
+          : q.gte("meal_slots.date", today);
+      }
     );
     for (const m of marks) {
       if (m.attending) optInSet.add(m.slot_id);
@@ -107,9 +119,9 @@ export async function GET(req: Request) {
         id: s.id,
         date: s.date,
         meal_type: s.meal_type,
-        // Dia que já passou aparece com cadeado: o servidor também rejeita
-        // alterações nesses slots (ver PUT /api/marks).
-        locked: s.locked || s.date < today,
+        // Histórico é somente consulta: tudo com cadeado. O servidor também
+        // rejeita alterações em dias passados (ver PUT /api/marks).
+        locked: s.locked || history || s.date < today,
         access: s.access, // "opcional" | "todos"
         marked,
       };

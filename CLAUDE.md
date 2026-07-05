@@ -52,7 +52,7 @@ Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo,
 ### Prazo / disponibilidade
 - O admin controla manualmente quais refeições existem e quais esquadrões participam, criando meal_slots por intervalo de datas.
 - O admin pode bloquear (locked) refeições — quando locked, cadetes não podem mais alterar.
-- Refeições passadas somem da visão do CADETE 1 dia após a data delas (o admin continua vendo tudo).
+- A visão principal do cadete mostra as refeições de HOJE em diante. As passadas ficam na aba "Últimos 7 dias" (GET /api/slots?history=1), somente consulta (tudo locked). O admin continua vendo tudo.
 - Fuso horário: sempre America/Sao_Paulo.
 
 ## Esquema do banco (principais tabelas)

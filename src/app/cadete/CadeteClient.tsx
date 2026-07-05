@@ -31,6 +31,18 @@ interface Props {
   qrToken: string | null;
 }
 
+// Agrupa slots por data. asc=false coloca o dia mais recente primeiro (histórico).
+function groupDays(slots: Slot[], asc: boolean) {
+  const map = new Map<string, Slot[]>();
+  for (const s of slots) {
+    if (!map.has(s.date)) map.set(s.date, []);
+    map.get(s.date)!.push(s);
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => (asc ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])))
+    .map(([date, daySlots]) => ({ date, daySlots }));
+}
+
 export default function CadeteClient({ user, qrToken }: Props) {
   const toast = useToast();
   const router = useRouter();
@@ -39,6 +51,13 @@ export default function CadeteClient({ user, qrToken }: Props) {
   const [error, setError] = useState("");
   const [pwOpen, setPwOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Aba "Últimos 7 dias": consulta somente-leitura das refeições passadas
+  // (carregada sob demanda na 1ª abertura e mantida em memória).
+  const [tab, setTab] = useState<"atuais" | "antigas">("atuais");
+  const [histSlots, setHistSlots] = useState<Slot[] | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histError, setHistError] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -83,17 +102,28 @@ export default function CadeteClient({ user, qrToken }: Props) {
     [toast]
   );
 
-  // Agrupa por data, mantendo ordem cronológica.
-  const days = useMemo(() => {
-    const map = new Map<string, Slot[]>();
-    for (const s of slots) {
-      if (!map.has(s.date)) map.set(s.date, []);
-      map.get(s.date)!.push(s);
+  // Abre a aba de antigas; busca do servidor só na primeira vez.
+  async function openHistory() {
+    setTab("antigas");
+    if (histSlots !== null || histLoading) return;
+    setHistLoading(true);
+    setHistError("");
+    try {
+      const res = await apiFetch("/api/slots?history=1");
+      const data = await res.json();
+      if (res.ok) setHistSlots(data.slots ?? []);
+      else setHistError(data.error ?? "Erro ao carregar refeições antigas");
+    } catch {
+      setHistError("Erro de conexão");
+    } finally {
+      setHistLoading(false);
     }
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, daySlots]) => ({ date, daySlots }));
-  }, [slots]);
+  }
+
+  // Agrupa por data: próximas em ordem cronológica; antigas com o dia mais
+  // recente primeiro (mais natural para consulta).
+  const days = useMemo(() => groupDays(slots, true), [slots]);
+  const histDays = useMemo(() => groupDays(histSlots ?? [], false), [histSlots]);
 
   // 3º/4º esquadrão podem desmarcar refeições "todos" (opt-out).
   const optOut = isOptOutSquadron(user.squadron);
@@ -136,6 +166,96 @@ export default function CadeteClient({ user, qrToken }: Props) {
 
   const initial = (user.name.trim()[0] ?? "?").toUpperCase();
 
+  // Card de um dia. readOnly = aba de antigas (sem "Todas", nada clicável —
+  // os slots já chegam com locked=true do servidor e mostram 🔒 Sim/Não).
+  function dayCard(date: string, daySlots: Slot[], readOnly: boolean) {
+    const markedCount = daySlots.filter((s) => s.marked).length;
+    const [wd, dt] = formatLongDate(date).split(", ");
+    const editable = daySlots.filter(canToggle);
+    const allMarked = editable.length > 0 && editable.every((s) => s.marked);
+    const someMarked = editable.some((s) => s.marked);
+    return (
+      <div className="cad-day" key={date}>
+        <div className="cad-day-head">
+          <div>
+            <div className="cad-day-wd">{wd}</div>
+            <div className="cad-day-dt">{dt}</div>
+          </div>
+          <div className="cad-day-head-right">
+            <div className="cad-count">
+              {markedCount} {markedCount === 1 ? "marcada" : "marcadas"}
+            </div>
+            {!readOnly && (
+              <DayAllToggle
+                checked={allMarked}
+                indeterminate={someMarked && !allMarked}
+                disabled={editable.length === 0}
+                onChange={(c) => toggleAllDay(daySlots, c)}
+              />
+            )}
+          </div>
+        </div>
+
+        {MEAL_TYPES.filter((mt) => daySlots.some((s) => s.meal_type === mt)).map(
+          (mt) => {
+            const slot = daySlots.find((s) => s.meal_type === mt)!;
+            // "todos" estrito (1º/2º) = obrigatória, não clicável.
+            const strict = slot.access === "todos" && !optOut;
+            const clickable =
+              !slot.locked && (slot.access === "opcional" || optOut);
+
+            const stateClass = slot.locked
+              ? "blocked"
+              : strict
+              ? "lock"
+              : slot.marked
+              ? "on"
+              : "off";
+
+            const right = slot.locked ? (
+              <span className="cad-pill-muted">
+                🔒 {slot.marked ? "Sim" : "Não"}
+              </span>
+            ) : strict ? (
+              <span className="cad-pill-req">Obrigatória</span>
+            ) : slot.marked ? (
+              <span className="cad-pill-box">✓</span>
+            ) : (
+              <span className="cad-pill-box" />
+            );
+
+            const inner = (
+              <>
+                <span className="cad-meal-left">
+                  <span className="cad-meal-ic" aria-hidden>
+                    {MEAL_ICONS[mt]}
+                  </span>
+                  <span className="cad-meal-nm">{MEAL_LABELS[mt]}</span>
+                </span>
+                {right}
+              </>
+            );
+
+            return clickable ? (
+              <button
+                key={slot.id}
+                type="button"
+                className={`cad-meal ${stateClass}`}
+                onClick={() => applyMark(slot, !slot.marked)}
+              >
+                {inner}
+              </button>
+            ) : (
+              <div key={slot.id} className={`cad-meal ${stateClass}`}>
+                {inner}
+              </div>
+            );
+          }
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="cad-root">
       <div className="cad-wrap">
@@ -169,129 +289,102 @@ export default function CadeteClient({ user, qrToken }: Props) {
           <MenuBanner />
         </div>
 
-        {/* Seção */}
+        {/* Seção + abas */}
         <div className="cad-max cad-sect">
           <h2>Suas Refeições</h2>
-          <div className="cad-hint">Toque para marcar</div>
+          <div className="cad-hint">
+            {tab === "atuais" ? "Toque para marcar" : "Somente consulta"}
+          </div>
+        </div>
+        <div className="cad-max cad-tabs">
+          <button
+            type="button"
+            className={`cad-tab${tab === "atuais" ? " active" : ""}`}
+            onClick={() => setTab("atuais")}
+          >
+            Próximas
+          </button>
+          <button
+            type="button"
+            className={`cad-tab${tab === "antigas" ? " active" : ""}`}
+            onClick={openHistory}
+          >
+            Últimos 7 dias
+          </button>
         </div>
 
-        {loading && (
-          <div
-            className="cad-max"
-            style={{ marginTop: 16, color: "#8b97a8", fontSize: 14 }}
-          >
-            Carregando…
-          </div>
+        {tab === "atuais" && (
+          <>
+            {loading && (
+              <div
+                className="cad-max"
+                style={{ marginTop: 16, color: "#8b97a8", fontSize: 14 }}
+              >
+                Carregando…
+              </div>
+            )}
+
+            {error && !loading && (
+              <div
+                className="cad-max"
+                style={{ marginTop: 16, color: "#ff9a9a", fontSize: 14 }}
+              >
+                {error}
+              </div>
+            )}
+
+            {!loading && !error && days.length === 0 && (
+              <div
+                className="cad-max"
+                style={{ marginTop: 16, color: "#8b97a8", fontSize: 14 }}
+              >
+                Nenhuma refeição disponível no momento.
+              </div>
+            )}
+
+            {!loading && days.length > 0 && (
+              <div className="cad-max cad-grid">
+                {days.map(({ date, daySlots }) => dayCard(date, daySlots, false))}
+              </div>
+            )}
+          </>
         )}
 
-        {error && !loading && (
-          <div
-            className="cad-max"
-            style={{ marginTop: 16, color: "#ff9a9a", fontSize: 14 }}
-          >
-            {error}
-          </div>
-        )}
+        {tab === "antigas" && (
+          <>
+            {histLoading && (
+              <div
+                className="cad-max"
+                style={{ marginTop: 16, color: "#8b97a8", fontSize: 14 }}
+              >
+                Carregando…
+              </div>
+            )}
 
-        {!loading && !error && days.length === 0 && (
-          <div
-            className="cad-max"
-            style={{ marginTop: 16, color: "#8b97a8", fontSize: 14 }}
-          >
-            Nenhuma refeição disponível no momento.
-          </div>
-        )}
+            {histError && !histLoading && (
+              <div
+                className="cad-max"
+                style={{ marginTop: 16, color: "#ff9a9a", fontSize: 14 }}
+              >
+                {histError}
+              </div>
+            )}
 
-        {!loading && days.length > 0 && (
-          <div className="cad-max cad-grid">
-            {days.map(({ date, daySlots }) => {
-              const markedCount = daySlots.filter((s) => s.marked).length;
-              const [wd, dt] = formatLongDate(date).split(", ");
-              const editable = daySlots.filter(canToggle);
-              const allMarked =
-                editable.length > 0 && editable.every((s) => s.marked);
-              const someMarked = editable.some((s) => s.marked);
-              return (
-                <div className="cad-day" key={date}>
-                  <div className="cad-day-head">
-                    <div>
-                      <div className="cad-day-wd">{wd}</div>
-                      <div className="cad-day-dt">{dt}</div>
-                    </div>
-                    <div className="cad-day-head-right">
-                      <div className="cad-count">
-                        {markedCount}{" "}
-                        {markedCount === 1 ? "marcada" : "marcadas"}
-                      </div>
-                      <DayAllToggle
-                        checked={allMarked}
-                        indeterminate={someMarked && !allMarked}
-                        disabled={editable.length === 0}
-                        onChange={(c) => toggleAllDay(daySlots, c)}
-                      />
-                    </div>
-                  </div>
+            {!histLoading && !histError && histDays.length === 0 && (
+              <div
+                className="cad-max"
+                style={{ marginTop: 16, color: "#8b97a8", fontSize: 14 }}
+              >
+                Nenhuma refeição nos últimos 7 dias.
+              </div>
+            )}
 
-                  {MEAL_TYPES.filter((mt) =>
-                    daySlots.some((s) => s.meal_type === mt)
-                  ).map((mt) => {
-                    const slot = daySlots.find((s) => s.meal_type === mt)!;
-                    // "todos" estrito (1º/2º) = obrigatória, não clicável.
-                    const strict = slot.access === "todos" && !optOut;
-                    const clickable =
-                      !slot.locked && (slot.access === "opcional" || optOut);
-
-                    const stateClass = slot.locked
-                      ? "blocked"
-                      : strict
-                      ? "lock"
-                      : slot.marked
-                      ? "on"
-                      : "off";
-
-                    const right = slot.locked ? (
-                      <span className="cad-pill-muted">
-                        🔒 {slot.marked ? "Sim" : "Não"}
-                      </span>
-                    ) : strict ? (
-                      <span className="cad-pill-req">Obrigatória</span>
-                    ) : slot.marked ? (
-                      <span className="cad-pill-box">✓</span>
-                    ) : (
-                      <span className="cad-pill-box" />
-                    );
-
-                    const inner = (
-                      <>
-                        <span className="cad-meal-left">
-                          <span className="cad-meal-ic" aria-hidden>
-                            {MEAL_ICONS[mt]}
-                          </span>
-                          <span className="cad-meal-nm">{MEAL_LABELS[mt]}</span>
-                        </span>
-                        {right}
-                      </>
-                    );
-
-                    return clickable ? (
-                      <button
-                        key={slot.id}
-                        type="button"
-                        className={`cad-meal ${stateClass}`}
-                        onClick={() => applyMark(slot, !slot.marked)}
-                      >
-                        {inner}
-                      </button>
-                    ) : (
-                      <div key={slot.id} className={`cad-meal ${stateClass}`}>
-                        {inner}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
+            {!histLoading && histDays.length > 0 && (
+              <div className="cad-max cad-grid">
+                {histDays.map(({ date, daySlots }) => dayCard(date, daySlots, true))}
+              </div>
+            )}
+          </>
         )}
 
         <div className="cad-foot">REFEIÇÕES AFA</div>
