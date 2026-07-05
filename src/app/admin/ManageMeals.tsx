@@ -522,6 +522,12 @@ function AccessSelector({
 
 // ---------------------------------------------------------------------------
 
+// Altura mínima ÚNICA das células da grade (vazias e preenchidas), para as
+// linhas ficarem alinhadas e uniformes. O valor corresponde à altura natural
+// de uma célula preenchida em cada layout.
+const CELL_MIN_H_MOBILE = "min-h-[64px]";
+const CELL_MIN_H_DESKTOP = "min-h-[152px]";
+
 function GridCell({
   slot,
   checked,
@@ -537,7 +543,7 @@ function GridCell({
     return (
       <button
         onClick={onClick}
-        className="flex h-full min-h-[44px] w-full items-center justify-center rounded-lg border border-dashed border-slate-200 px-2 py-1.5 text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300"
+        className={`flex h-full ${CELL_MIN_H_MOBILE} w-full items-center justify-center rounded-lg border border-dashed border-slate-200 px-2 py-1.5 text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300`}
         title="Criar refeição"
       >
         +
@@ -546,7 +552,7 @@ function GridCell({
   }
   return (
     <div
-      className={`rounded-lg border px-1.5 py-1.5 transition ${
+      className={`${CELL_MIN_H_MOBILE} rounded-lg border px-1.5 py-1.5 transition ${
         slot.locked
           ? "border-slate-200 bg-slate-100 dark:border-gray-600 dark:bg-gray-700/50"
           : "border-slate-200 bg-white dark:border-gray-600 dark:bg-gray-700"
@@ -666,7 +672,7 @@ function DesktopCell({
     return (
       <button
         onClick={onClick}
-        className="flex min-h-[132px] w-full items-center justify-center rounded-xl border border-dashed border-slate-200 text-2xl text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300"
+        className={`flex h-full ${CELL_MIN_H_DESKTOP} w-full items-center justify-center rounded-xl border border-dashed border-slate-200 text-2xl text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300`}
         title="Criar refeição"
       >
         ＋
@@ -675,7 +681,7 @@ function DesktopCell({
   }
   return (
     <div
-      className={`flex h-full min-w-0 flex-col gap-2 rounded-xl border p-2.5 transition ${
+      className={`flex h-full ${CELL_MIN_H_DESKTOP} min-w-0 flex-col gap-2 rounded-xl border p-2.5 transition ${
         slot.locked
           ? "border-slate-200 bg-slate-50 dark:border-gray-600 dark:bg-gray-700/40"
           : "border-slate-200 bg-white dark:border-gray-600 dark:bg-gray-700/60"
