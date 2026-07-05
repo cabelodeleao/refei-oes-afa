@@ -105,8 +105,9 @@ export default function AdminClient({ user }: Props) {
   // interno do header (título, abas, botões) usam a MESMA largura máxima e
   // ficam alinhados. A faixa azul do header continua full width; só o miolo
   // é centralizado. Largura escolhida p/ comportar o bloco da aba Gerenciar
-  // Refeições (form 290px + grade compacta) sem esticar as demais.
-  const container = "mx-auto w-full max-w-[1100px] px-4 sm:px-6";
+  // Refeições SEM scroll horizontal: form 290px + grade com 4 colunas de
+  // refeição de no mínimo 160px cada (ver ManageMeals), com folga.
+  const container = "mx-auto w-full max-w-[1240px] px-4 sm:px-6";
 
   return (
     <div className="min-h-[100dvh]">
