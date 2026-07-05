@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -16,13 +16,37 @@ function withSlash(raw: string): string {
 
 // GET /api/admin/cadets?q=texto  (admin)
 // Busca cadetes por número ou nome (exclui a conta admin). Máx. 50 resultados.
+//   ?all=1 — retorna TODOS os cadetes (paginado com selectAll: são ~629,
+//   e o efetivo pode passar do limite de 1000 linhas do PostgREST).
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session?.is_admin) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
-  const raw = new URL(req.url).searchParams.get("q") ?? "";
+  const { searchParams } = new URL(req.url);
+
+  if (searchParams.get("all") === "1") {
+    try {
+      const cadets = await selectAll<{
+        id: string;
+        number: string;
+        name: string;
+        squadron: number;
+      }>("cadets", "id, number, name, squadron", (q) => q.gt("squadron", 0));
+      cadets.sort((a, b) =>
+        a.number.localeCompare(b.number, "pt-BR", { numeric: true })
+      );
+      return NextResponse.json({ cadets });
+    } catch {
+      return NextResponse.json(
+        { error: "Erro ao buscar cadetes" },
+        { status: 500 }
+      );
+    }
+  }
+
+  const raw = searchParams.get("q") ?? "";
   // Remove caracteres que quebram o filtro .or do PostgREST (vírgula/parênteses).
   const q = raw.trim().replace(/[,()%]/g, "").slice(0, 50);
 

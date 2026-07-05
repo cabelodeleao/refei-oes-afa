@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/client";
 import { useToast } from "@/components/Toast";
-import { SQUADRON_LABELS } from "@/lib/constants";
+import { SQUADRON_LABELS, SQUADRON_YEAR, ALL_SQUADRONS } from "@/lib/constants";
 
 interface Cadet {
   id: string;
@@ -23,6 +23,11 @@ export default function Cadets() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout>>();
 
+  // Efetivo completo (visão por esquadrão, exibida quando a busca está vazia).
+  const [allCadets, setAllCadets] = useState<Cadet[] | null>(null);
+  const [allError, setAllError] = useState("");
+  const [openSquadron, setOpenSquadron] = useState<number | null>(null);
+
   // Formulário de novo cadete.
   const [addOpen, setAddOpen] = useState(false);
   const [newNumber, setNewNumber] = useState("");
@@ -30,7 +35,21 @@ export default function Cadets() {
   const [newSquadron, setNewSquadron] = useState("");
   const [addBusy, setAddBusy] = useState(false);
 
-  // Busca com debounce (300ms). Sem texto, não busca: mostra o estado inicial.
+  // Carrega o efetivo completo uma vez (para a visão por esquadrão).
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiFetch("/api/admin/cadets?all=1");
+        const data = await res.json();
+        if (res.ok) setAllCadets(data.cadets ?? []);
+        else setAllError(data.error ?? "Erro ao carregar o efetivo");
+      } catch {
+        setAllError("Erro de conexão");
+      }
+    })();
+  }, []);
+
+  // Busca com debounce (300ms). Sem texto, mostra a visão por esquadrão.
   useEffect(() => {
     const term = q.trim();
     clearTimeout(debounce.current);
@@ -75,7 +94,14 @@ export default function Cadets() {
         setNewNumber("");
         setNewName("");
         setNewSquadron("");
-        // Mostra o cadete recém-criado na lista.
+        // Inclui na visão por esquadrão e mostra o recém-criado na busca.
+        setAllCadets((prev) =>
+          prev
+            ? [...prev, data.cadet].sort((a, b) =>
+                a.number.localeCompare(b.number, "pt-BR", { numeric: true })
+              )
+            : prev
+        );
         setQ(data.cadet.number);
       } else {
         toast.error(data.error ?? "Erro ao criar o cadete.");
@@ -121,6 +147,9 @@ export default function Cadets() {
       if (res.ok) {
         toast.success(`Cadete ${data.number} ${data.name} excluído.`);
         setCadets((prev) => prev.filter((c) => c.id !== cadet.id));
+        setAllCadets((prev) =>
+          prev ? prev.filter((c) => c.id !== cadet.id) : prev
+        );
         setDeleting(null);
       } else {
         toast.error(data.error ?? "Erro ao excluir o cadete.");
@@ -131,6 +160,45 @@ export default function Cadets() {
       setDeleteBusy(false);
     }
   }
+
+  // Linha de cadete (usada na busca e na visão por esquadrão).
+  function cadetRow(c: Cadet, showSquadron: boolean) {
+    return (
+      <li
+        key={c.id}
+        className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-slate-50/60 dark:hover:bg-gray-700/40"
+      >
+        <span className="font-mono text-sm text-slate-500 dark:text-gray-400">
+          {c.number}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-slate-700 dark:text-gray-100">
+            {c.name}
+          </p>
+          {showSquadron && (
+            <p className="text-xs text-slate-400 dark:text-gray-500">
+              {SQUADRON_LABELS[c.squadron] ?? "—"}
+            </p>
+          )}
+        </div>
+        <button
+          className="btn-secondary shrink-0 px-3 py-1.5 text-xs"
+          onClick={() => setConfirming(c)}
+        >
+          Resetar senha
+        </button>
+        <button
+          className="btn-danger shrink-0 px-3 py-1.5 text-xs"
+          onClick={() => setDeleting(c)}
+        >
+          Excluir
+        </button>
+      </li>
+    );
+  }
+
+  const searching = q.trim().length > 0;
+  const total = allCadets?.length ?? 0;
 
   return (
     <div className="space-y-5">
@@ -144,7 +212,7 @@ export default function Cadets() {
         </p>
         <input
           className="input"
-          placeholder="🔎 Buscar por número ou nome (ex: 25217 ou Silva)"
+          placeholder="🔎 Buscar por número ou nome (ex: 23000 ou Silva)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           autoFocus
@@ -187,7 +255,7 @@ export default function Cadets() {
                 </label>
                 <input
                   className="input"
-                  placeholder="Ex: 25217"
+                  placeholder="Ex: 23000"
                   value={newNumber}
                   onChange={(e) => setNewNumber(e.target.value)}
                   required
@@ -204,7 +272,7 @@ export default function Cadets() {
                   required
                 >
                   <option value="">Selecione…</option>
-                  {[1, 2, 3, 4].map((sq) => (
+                  {ALL_SQUADRONS.map((sq) => (
                     <option key={sq} value={sq}>
                       {SQUADRON_LABELS[sq]}
                     </option>
@@ -231,52 +299,97 @@ export default function Cadets() {
         )}
       </section>
 
-      <section className="card overflow-hidden animate-fade-in-up">
-        {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400 dark:text-gray-500">
-            Buscando…
-          </div>
-        ) : cadets.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400 dark:text-gray-500">
-            {q.trim()
-              ? "Nenhum cadete encontrado."
-              : "Digite para buscar um cadete."}
-          </div>
-        ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-gray-700">
-            {cadets.map((c) => (
-              <li
-                key={c.id}
-                className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-slate-50/60 dark:hover:bg-gray-700/40"
-              >
-                <span className="font-mono text-sm text-slate-500 dark:text-gray-400">
-                  {c.number}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-slate-700 dark:text-gray-100">
-                    {c.name}
-                  </p>
-                  <p className="text-xs text-slate-400 dark:text-gray-500">
-                    {SQUADRON_LABELS[c.squadron] ?? "—"}
-                  </p>
-                </div>
-                <button
-                  className="btn-secondary shrink-0 px-3 py-1.5 text-xs"
-                  onClick={() => setConfirming(c)}
-                >
-                  Resetar senha
-                </button>
-                <button
-                  className="btn-danger shrink-0 px-3 py-1.5 text-xs"
-                  onClick={() => setDeleting(c)}
-                >
-                  Excluir
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* Resultados da busca */}
+      {searching && (
+        <section className="card overflow-hidden animate-fade-in-up">
+          {loading ? (
+            <div className="px-5 py-8 text-center text-sm text-slate-400 dark:text-gray-500">
+              Buscando…
+            </div>
+          ) : cadets.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-slate-400 dark:text-gray-500">
+              Nenhum cadete encontrado.
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-gray-700">
+              {cadets.map((c) => cadetRow(c, true))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {/* Efetivo por esquadrão (quando não há busca) */}
+      {!searching && (
+        <>
+          {allCadets === null && !allError && (
+            <section className="card px-5 py-8 text-center text-sm text-slate-400 dark:text-gray-500 animate-fade-in-up">
+              Carregando efetivo…
+            </section>
+          )}
+          {allError && (
+            <section className="card px-5 py-8 text-center text-sm text-red-600 dark:text-red-400 animate-fade-in-up">
+              {allError}
+            </section>
+          )}
+          {allCadets !== null && !allError && (
+            <>
+              <p className="text-center text-xs text-slate-500 dark:text-gray-400">
+                {total} {total === 1 ? "cadete cadastrado" : "cadetes cadastrados"}{" "}
+                no total
+              </p>
+              {ALL_SQUADRONS.map((sq) => {
+                const list = allCadets.filter((c) => c.squadron === sq);
+                const open = openSquadron === sq;
+                return (
+                  <section
+                    key={sq}
+                    className="card overflow-hidden animate-fade-in-up"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setOpenSquadron(open ? null : sq)}
+                      className="flex w-full items-center justify-between px-5 py-3.5 text-left"
+                    >
+                      <span className="flex items-baseline gap-2">
+                        <span className="text-sm font-bold text-navy-800 dark:text-gray-100">
+                          {SQUADRON_LABELS[sq]}
+                        </span>
+                        <span className="text-xs text-slate-400 dark:text-gray-500">
+                          {SQUADRON_YEAR[sq]}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-gray-400">
+                          {list.length}{" "}
+                          {list.length === 1 ? "cadete" : "cadetes"}
+                        </span>
+                        <span
+                          className={`text-slate-400 transition-transform ${
+                            open ? "rotate-180" : ""
+                          }`}
+                        >
+                          ▾
+                        </span>
+                      </span>
+                    </button>
+                    {open && (
+                      <ul className="divide-y divide-slate-100 border-t border-slate-100 dark:divide-gray-700 dark:border-gray-700">
+                        {list.length === 0 ? (
+                          <li className="px-5 py-6 text-center text-sm text-slate-400 dark:text-gray-500">
+                            Nenhum cadete neste esquadrão.
+                          </li>
+                        ) : (
+                          list.map((c) => cadetRow(c, false))
+                        )}
+                      </ul>
+                    )}
+                  </section>
+                );
+              })}
+            </>
+          )}
+        </>
+      )}
 
       {confirming && (
         <div

@@ -64,7 +64,7 @@ export default function LoginPage() {
               </label>
               <input
                 className="input-glass"
-                placeholder="Ex: 25217"
+                placeholder="Ex: 23000"
                 autoCapitalize="none"
                 autoComplete="username"
                 value={number}
