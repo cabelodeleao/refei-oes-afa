@@ -221,8 +221,11 @@ export default function Fiscalizacao() {
       {/* Cards por refeição: filtro por refeição */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {slots.map((s) => {
+          // "Compareceram" = TODOS que passaram pelo rancho: entradas normais
+          // + entraram sem marcar + QR reutilizado + registros sem QR.
+          const attended = s.entered + s.not_marked + s.duplicated + s.no_qr;
           const pct =
-            s.expected > 0 ? Math.round((s.entered / s.expected) * 100) : null;
+            s.expected > 0 ? Math.round((attended / s.expected) * 100) : null;
           return (
             <button
               key={s.id}
@@ -252,23 +255,20 @@ export default function Fiscalizacao() {
                       {s.expected}
                     </span>
                   </div>
-                  <div className="flex items-baseline justify-between">
+                  <div
+                    className="flex items-baseline justify-between"
+                    title="Total que passou pelo rancho: entradas normais + sem marcar + QR reutilizado + sem QR"
+                  >
                     <span className="font-medium text-emerald-600">
                       Compareceram
                     </span>
                     <span className="font-bold text-emerald-600">
-                      {s.entered}
+                      {attended}
                       {pct !== null && (
                         <span className="ml-1 text-xs font-semibold opacity-80">
                           ({pct}%)
                         </span>
                       )}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-medium text-orange-600">Faltaram</span>
-                    <span className="font-bold text-orange-600">
-                      {s.no_show}
                     </span>
                   </div>
                 </div>
