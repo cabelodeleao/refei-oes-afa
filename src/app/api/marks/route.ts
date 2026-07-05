@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { getAccess, isOptOutSquadron } from "@/lib/constants";
+import { todaySaoPaulo } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -66,7 +67,7 @@ export async function PUT(req: Request) {
   // Validação server-side: slot existe, não está locked, pertence ao esquadrão.
   const { data: slot, error: slotErr } = await supabaseAdmin
     .from("meal_slots")
-    .select("id, squadrons, locked")
+    .select("id, date, squadrons, locked")
     .eq("id", slotId)
     .maybeSingle();
 
@@ -79,6 +80,14 @@ export async function PUT(req: Request) {
   if (slot.locked) {
     return NextResponse.json(
       { error: "Refeição bloqueada — não é possível alterar" },
+      { status: 409 }
+    );
+  }
+  // Refeição de dia que já passou não pode mais ser alterada (impede, por
+  // exemplo, desmarcar retroativamente para sumir da lista de faltas).
+  if (slot.date < todaySaoPaulo()) {
+    return NextResponse.json(
+      { error: "Refeição de dia que já passou — não é possível alterar" },
       { status: 409 }
     );
   }

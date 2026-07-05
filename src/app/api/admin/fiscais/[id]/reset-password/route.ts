@@ -34,10 +34,15 @@ export async function POST(
   }
 
   // Volta para a senha padrão e força a troca no próximo login do fiscal.
+  // password_changed_at também derruba as sessões abertas dele.
   const newHash = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
   const { error: updErr } = await supabaseAdmin
     .from("cadets")
-    .update({ password_hash: newHash, must_change_password: true })
+    .update({
+      password_hash: newHash,
+      must_change_password: true,
+      password_changed_at: new Date().toISOString(),
+    })
     .eq("id", id)
     .eq("is_fiscal", true);
 

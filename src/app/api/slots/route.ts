@@ -33,8 +33,17 @@ export async function GET(req: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  // Paginado: o cadete carrega todos os slots (sem from/to) e o total cresce
-  // com o tempo, podendo passar de 1000.
+  // Refeições passadas somem para o cadete 1 dia após a data delas: ele vê até
+  // o dia seguinte (data >= ontem). O cálculo de "hoje" usa o fuso de São Paulo
+  // e a comparação é por data (YYYY-MM-DD ordena lexicograficamente). O slot não
+  // é apagado — apenas fica oculto para o cadete (o admin continua vendo tudo).
+  // O corte é aplicado NA QUERY: o cadete não carrega o histórico inteiro,
+  // que só cresce com o tempo.
+  const today = todaySaoPaulo();
+  const cutoff = toISODate(addDays(parseISODate(today), -1));
+  const isCadet = !session.is_admin;
+
+  // Paginado: o total de slots cresce com o tempo, podendo passar de 1000.
   let slots: SlotRow[];
   try {
     slots = await selectAll<SlotRow>(
@@ -43,6 +52,7 @@ export async function GET(req: Request) {
       (q) => {
         if (from) q = q.gte("date", from);
         if (to) q = q.lte("date", to);
+        if (isCadet) q = q.gte("date", cutoff);
         return q;
       }
     );
@@ -56,26 +66,21 @@ export async function GET(req: Request) {
     return NextResponse.json({ slots });
   }
 
-  // Refeições passadas somem para o cadete 1 dia após a data delas: ele vê até
-  // o dia seguinte (data >= ontem). O cálculo de "hoje" usa o fuso de São Paulo
-  // e a comparação é por data (YYYY-MM-DD ordena lexicograficamente). O slot não
-  // é apagado — apenas fica oculto para o cadete (o admin continua vendo tudo).
-  const cutoff = toISODate(addDays(parseISODate(todaySaoPaulo()), -1));
-
   // Cadete: vê slots em que seu esquadrão é "opcional" ou "todos".
   // "ninguem" não aparece. Inclui o estado de acesso e a marcação dele.
   const visible = slots
     .map((s) => ({ ...s, access: getAccess(s.squadrons, session.squadron) }))
-    .filter((s) => s.access !== "ninguem" && s.date >= cutoff);
+    .filter((s) => s.access !== "ninguem");
 
-  // Escolhas explícitas do cadete (paginado): opt-ins e opt-outs.
+  // Escolhas explícitas do cadete no período visível (paginado): opt-ins e
+  // opt-outs. O join com meal_slots evita carregar o histórico inteiro.
   const optInSet = new Set<string>(); // attending=true  (Sim em opcional)
   const optOutSet = new Set<string>(); // attending=false (Não em opt-out)
   try {
     const marks = await selectAll<{ slot_id: string; attending: boolean }>(
       "meal_marks",
-      "id, slot_id, attending",
-      (q) => q.eq("cadet_id", session.sub)
+      "id, slot_id, attending, meal_slots!inner(date)",
+      (q) => q.eq("cadet_id", session.sub).gte("meal_slots.date", cutoff)
     );
     for (const m of marks) {
       if (m.attending) optInSet.add(m.slot_id);
@@ -102,7 +107,9 @@ export async function GET(req: Request) {
         id: s.id,
         date: s.date,
         meal_type: s.meal_type,
-        locked: s.locked,
+        // Dia que já passou aparece com cadeado: o servidor também rejeita
+        // alterações nesses slots (ver PUT /api/marks).
+        locked: s.locked || s.date < today,
         access: s.access, // "opcional" | "todos"
         marked,
       };

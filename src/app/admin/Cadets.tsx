@@ -19,7 +19,16 @@ export default function Cadets() {
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState<Cadet | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState<Cadet | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout>>();
+
+  // Formulário de novo cadete.
+  const [addOpen, setAddOpen] = useState(false);
+  const [newNumber, setNewNumber] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newSquadron, setNewSquadron] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
 
   // Busca com debounce (300ms). Sem texto, não busca: mostra o estado inicial.
   useEffect(() => {
@@ -45,6 +54,39 @@ export default function Cadets() {
     return () => clearTimeout(debounce.current);
   }, [q]);
 
+  async function addCadet(e: React.FormEvent) {
+    e.preventDefault();
+    setAddBusy(true);
+    try {
+      const res = await apiFetch("/api/admin/cadets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          number: newNumber,
+          name: newName,
+          squadron: Number(newSquadron),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(
+          `Cadete ${data.cadet.number} ${data.cadet.name} criado! Senha inicial: 123456`
+        );
+        setNewNumber("");
+        setNewName("");
+        setNewSquadron("");
+        // Mostra o cadete recém-criado na lista.
+        setQ(data.cadet.number);
+      } else {
+        toast.error(data.error ?? "Erro ao criar o cadete.");
+      }
+    } catch {
+      toast.error("Erro de conexão.");
+    } finally {
+      setAddBusy(false);
+    }
+  }
+
   async function resetPassword(cadet: Cadet) {
     setResetting(true);
     try {
@@ -69,6 +111,27 @@ export default function Cadets() {
     }
   }
 
+  async function deleteCadet(cadet: Cadet) {
+    setDeleteBusy(true);
+    try {
+      const res = await apiFetch(`/api/admin/cadets/${cadet.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Cadete ${data.number} ${data.name} excluído.`);
+        setCadets((prev) => prev.filter((c) => c.id !== cadet.id));
+        setDeleting(null);
+      } else {
+        toast.error(data.error ?? "Erro ao excluir o cadete.");
+      }
+    } catch {
+      toast.error("Erro de conexão.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <section className="card p-5 animate-fade-in-up">
@@ -76,16 +139,96 @@ export default function Cadets() {
           👤 Cadetes
         </h2>
         <p className="mb-3 text-xs text-slate-500 dark:text-gray-400">
-          Busque por número ou nome para resetar a senha de um cadete que esqueceu
-          a senha (volta para <span className="font-semibold">123456</span>).
+          Busque por número ou nome para resetar a senha (volta para{" "}
+          <span className="font-semibold">123456</span>) ou excluir um cadete.
         </p>
         <input
           className="input"
-          placeholder="🔎 Buscar por número ou nome (ex: 23/001 ou Silva)"
+          placeholder="🔎 Buscar por número ou nome (ex: 25217 ou Silva)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           autoFocus
         />
+      </section>
+
+      {/* Adicionar cadete */}
+      <section className="card animate-fade-in-up">
+        <button
+          type="button"
+          onClick={() => setAddOpen((o) => !o)}
+          className="flex w-full items-center justify-between rounded-t-2xl px-5 py-3 text-left"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-navy-800 dark:text-gray-100">
+            ➕ Adicionar cadete
+          </span>
+          <span
+            className={`text-slate-400 transition-transform ${
+              addOpen ? "rotate-180" : ""
+            }`}
+          >
+            ▾
+          </span>
+        </button>
+
+        {addOpen && (
+          <form
+            onSubmit={addCadet}
+            className="space-y-3 border-t border-slate-100 px-5 py-4 dark:border-gray-700"
+          >
+            <p className="text-xs text-slate-500 dark:text-gray-400">
+              O cadete entra com a senha inicial{" "}
+              <span className="font-semibold">123456</span> e é obrigado a
+              trocá-la no primeiro acesso. O QR code é gerado automaticamente.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                  Número
+                </label>
+                <input
+                  className="input"
+                  placeholder="Ex: 25217"
+                  value={newNumber}
+                  onChange={(e) => setNewNumber(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                  Esquadrão
+                </label>
+                <select
+                  className="input"
+                  value={newSquadron}
+                  onChange={(e) => setNewSquadron(e.target.value)}
+                  required
+                >
+                  <option value="">Selecione…</option>
+                  {[1, 2, 3, 4].map((sq) => (
+                    <option key={sq} value={sq}>
+                      {SQUADRON_LABELS[sq]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
+                Nome de guerra
+              </label>
+              <input
+                className="input"
+                placeholder="Ex: SILVA"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                required
+              />
+            </div>
+            <button className="btn-primary w-full" type="submit" disabled={addBusy}>
+              {addBusy ? "Criando…" : "Criar cadete"}
+            </button>
+          </form>
+        )}
       </section>
 
       <section className="card overflow-hidden animate-fade-in-up">
@@ -122,6 +265,12 @@ export default function Cadets() {
                   onClick={() => setConfirming(c)}
                 >
                   Resetar senha
+                </button>
+                <button
+                  className="btn-danger shrink-0 px-3 py-1.5 text-xs"
+                  onClick={() => setDeleting(c)}
+                >
+                  Excluir
                 </button>
               </li>
             ))}
@@ -161,6 +310,47 @@ export default function Cadets() {
                 disabled={resetting}
               >
                 {resetting ? "Resetando…" : "Resetar para 123456"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleting && (
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          onClick={() => !deleteBusy && setDeleting(null)}
+        >
+          <div
+            className="card w-full max-w-md p-5 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-red-700 dark:text-red-400">
+              Excluir cadete
+            </h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-gray-300">
+              Tem certeza que deseja excluir{" "}
+              <span className="font-semibold">{deleting.number}</span>{" "}
+              <span className="font-semibold">{deleting.name}</span>?
+            </p>
+            <p className="mt-2 text-sm font-semibold text-red-600 dark:text-red-400">
+              Todas as marcações e o histórico de entradas dele serão apagados.
+              Esta ação não pode ser desfeita.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                className="btn-ghost"
+                onClick={() => setDeleting(null)}
+                disabled={deleteBusy}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-danger"
+                onClick={() => deleteCadet(deleting)}
+                disabled={deleteBusy}
+              >
+                {deleteBusy ? "Excluindo…" : "Excluir definitivamente"}
               </button>
             </div>
           </div>

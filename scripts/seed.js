@@ -62,16 +62,18 @@ async function main() {
     })),
   ];
 
-  console.log(`[seed] Inserindo ${rows.length} registros (upsert por number)...`);
+  console.log(`[seed] Inserindo ${rows.length} registros (só quem não existe)...`);
 
-  // Upsert em lotes para não estourar limites de payload.
+  // IMPORTANTE: ignoreDuplicates=true faz o seed inserir APENAS números novos.
+  // Quem já existe no banco é deixado intacto — rodar o seed de novo NÃO reseta
+  // senha, QR code nem must_change_password de ninguém.
   const BATCH = 200;
   let inserted = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);
     const { error } = await supabase
       .from("cadets")
-      .upsert(batch, { onConflict: "number", ignoreDuplicates: false });
+      .upsert(batch, { onConflict: "number", ignoreDuplicates: true });
 
     if (error) {
       console.error("[seed] Erro ao inserir lote:", error.message);
@@ -82,8 +84,8 @@ async function main() {
   }
 
   console.log("\n[seed] Concluído com sucesso ✔");
-  console.log("[seed] Admin: number=admin senha=123456");
-  console.log("[seed] Cadetes: senha inicial 123456\n");
+  console.log("[seed] Cadetes já existentes NÃO foram alterados (senha/QR preservados).");
+  console.log("[seed] Novos: senha inicial 123456 (troca obrigatória no 1º acesso)\n");
 }
 
 main().catch((err) => {

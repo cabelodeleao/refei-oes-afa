@@ -48,10 +48,16 @@ export async function POST(req: Request) {
   }
 
   // Volta para a senha padrão e força a troca no próximo login do cadete.
+  // password_changed_at também derruba as sessões abertas dele (útil quando o
+  // reset é por suspeita de uso indevido da conta).
   const newHash = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
   const { error: updErr } = await supabaseAdmin
     .from("cadets")
-    .update({ password_hash: newHash, must_change_password: true })
+    .update({
+      password_hash: newHash,
+      must_change_password: true,
+      password_changed_at: new Date().toISOString(),
+    })
     .eq("id", cadet.id);
 
   if (updErr) {

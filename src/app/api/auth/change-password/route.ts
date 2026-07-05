@@ -62,9 +62,15 @@ export async function POST(req: Request) {
   }
 
   const newHash = bcrypt.hashSync(newPassword, 10);
+  // password_changed_at derruba as sessões antigas deste usuário em outros
+  // aparelhos (tokens emitidos antes da troca deixam de valer).
   const { error: updErr } = await supabaseAdmin
     .from("cadets")
-    .update({ password_hash: newHash, must_change_password: false })
+    .update({
+      password_hash: newHash,
+      must_change_password: false,
+      password_changed_at: new Date().toISOString(),
+    })
     .eq("id", cadet.id);
 
   if (updErr) {

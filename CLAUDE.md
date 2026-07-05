@@ -56,7 +56,7 @@ Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo,
 - Fuso horário: sempre America/Sao_Paulo.
 
 ## Esquema do banco (principais tabelas)
-- **cadets**: id, number, name, squadron (0-4), password_hash, is_admin, is_fiscal, must_change_password, qr_token, created_at
+- **cadets**: id, number, name, squadron (0-4), password_hash, is_admin, is_fiscal, must_change_password, qr_token, password_changed_at, created_at. Tokens JWT emitidos antes de password_changed_at são rejeitados em getSession (troca/reset de senha derruba sessões antigas).
 - **meal_slots**: id, date, meal_type ('cafe'/'almoco'/'janta'/'ceia'), squadrons (JSONB com estados por esquadrão), locked, created_at. UNIQUE(date, meal_type)
 - **meal_marks**: id, cadet_id, slot_id, created_at. UNIQUE(cadet_id, slot_id). Existência da linha = marcou "Sim".
 - **meal_entries**: registro oficial de entradas autorizadas (fiscalização). UNIQUE(cadet_id, slot_id)
@@ -103,4 +103,6 @@ Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo,
 ## Deploy
 - Push para o GitHub → Vercel rebuilda automaticamente.
 - Variáveis de ambiente configuradas na Vercel (as 3 acima).
-- O seed (npm run seed) popula os cadetes a partir de scripts/cadets-data.json e cria a conta admin.
+- O seed (npm run seed) popula os cadetes a partir de cadets-data.json e cria a conta admin. É INSERT-ONLY (ignoreDuplicates): rodar de novo NÃO altera senha/QR de quem já existe. Cadetes individuais são criados/excluídos pelo admin na aba Cadetes.
+- Login aceita o número com ou sem barra ("25/217" ou "25217"); o banco armazena com barra.
+- Cadetes não podem alterar marcações de refeições de dias que já passaram (validação no PUT /api/marks + cadeado na UI).

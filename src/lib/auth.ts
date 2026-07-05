@@ -60,7 +60,43 @@ export async function verifySession(
 }
 
 // Lê a sessão atual a partir do cookie (uso em Server Components / Route Handlers).
+// Além de verificar a assinatura do JWT, confere no banco se a senha foi
+// trocada DEPOIS de o token ser emitido — nesse caso a sessão antiga morre
+// (troca voluntária, reset pelo admin ou conta excluída).
+//
+// O import do Supabase é dinâmico de propósito: este módulo também é usado
+// pelo middleware (Edge), que só chama verifySession e não deve carregar o
+// cliente do banco.
 export async function getSession(): Promise<SessionUser | null> {
   const token = cookies().get(COOKIE_NAME)?.value;
-  return verifySession(token);
+  const session = await verifySession(token);
+  if (!session) return null;
+
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const { data, error } = await supabaseAdmin
+      .from("cadets")
+      .select("password_changed_at")
+      .eq("id", session.sub)
+      .maybeSingle();
+
+    // Banco indisponível ou coluna ainda não criada (migração pendente):
+    // não derruba a sessão por isso.
+    if (error) return session;
+    // Conta excluída: sessão morre imediatamente.
+    if (!data) return null;
+
+    const changedAt = data.password_changed_at
+      ? Date.parse(data.password_changed_at as string) / 1000
+      : 0;
+    // 5s de tolerância: o token reemitido na própria troca de senha tem iat
+    // praticamente igual ao password_changed_at e deve continuar válido.
+    if (typeof session.iat === "number" && session.iat < changedAt - 5) {
+      return null;
+    }
+  } catch {
+    return session;
+  }
+
+  return session;
 }

@@ -30,8 +30,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // Rate-limit por número (case-insensitive): 5 falhas / 15 min.
-  const rlKey = number.toLowerCase();
+  // Rate-limit por número (case-insensitive e sem barra: "25217" e "25/217"
+  // contam como a mesma conta): 5 falhas / 15 min.
+  const rlKey = number.toLowerCase().replace(/\//g, "");
   if (!isAllowed(rlKey)) {
     return NextResponse.json(
       { error: `Muitas tentativas. Aguarde ${RATE_LIMIT_MINUTES} minutos.` },
@@ -39,17 +40,34 @@ export async function POST(req: Request) {
     );
   }
 
-  const { data: cadet, error } = await supabaseAdmin
+  const CADET_COLUMNS =
+    "id, number, name, squadron, password_hash, is_admin, is_fiscal, must_change_password";
+
+  // Busca pelo número exatamente como digitado ("25/217", "admin"...).
+  let { data: cadet, error } = await supabaseAdmin
     .from("cadets")
-    .select(
-      "id, number, name, squadron, password_hash, is_admin, is_fiscal, must_change_password"
-    )
+    .select(CADET_COLUMNS)
     .eq("number", number)
     .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
   }
+
+  // Número digitado sem a barra ("25217"): tenta no formato do banco ("25/217").
+  if (!cadet && /^\d{3,}$/.test(number)) {
+    const withSlash = `${number.slice(0, 2)}/${number.slice(2)}`;
+    const retry = await supabaseAdmin
+      .from("cadets")
+      .select(CADET_COLUMNS)
+      .eq("number", withSlash)
+      .maybeSingle();
+    if (retry.error) {
+      return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    }
+    cadet = retry.data;
+  }
+
   if (!cadet) {
     recordFailure(rlKey);
     return NextResponse.json(
