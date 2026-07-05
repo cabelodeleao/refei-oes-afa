@@ -381,7 +381,10 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
               vazio à direita, e cabeçalho/linhas ficam alinhados. overflow-x-
               auto é só rede de segurança em telas muito estreitas. */}
           <div className="hidden px-4 py-4 lg:block lg:overflow-x-auto">
-            <div className="grid w-max grid-cols-[60px_repeat(4,max-content)] gap-x-2.5 gap-y-2">
+            {/* minmax dá um piso de largura às colunas de refeição: uma coluna
+                inteiramente vazia (só "+") não encolhe — fica da largura de uma
+                célula preenchida (pílula "1º Esq Obrigatório" confortável). */}
+            <div className="grid w-max grid-cols-[60px_repeat(4,minmax(160px,max-content))] gap-x-2.5 gap-y-2">
               {/* Cabeçalho de colunas */}
               <div className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
                 Dia
@@ -522,10 +525,12 @@ function AccessSelector({
 
 // ---------------------------------------------------------------------------
 
-// Altura mínima ÚNICA das células da grade (vazias e preenchidas), para as
-// linhas ficarem alinhadas e uniformes. O valor corresponde à altura natural
-// de uma célula preenchida em cada layout.
+// Dimensões mínimas ÚNICAS das células da grade (vazias e preenchidas), para
+// linhas e colunas ficarem alinhadas e uniformes. Os valores correspondem ao
+// tamanho natural de uma célula preenchida em cada layout. A largura mínima
+// do desktop fica no template do grid (minmax), não na célula.
 const CELL_MIN_H_MOBILE = "min-h-[64px]";
+const CELL_MIN_W_MOBILE = "min-w-[88px]";
 const CELL_MIN_H_DESKTOP = "min-h-[152px]";
 
 function GridCell({
@@ -543,7 +548,7 @@ function GridCell({
     return (
       <button
         onClick={onClick}
-        className={`flex h-full ${CELL_MIN_H_MOBILE} w-full items-center justify-center rounded-lg border border-dashed border-slate-200 px-2 py-1.5 text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300`}
+        className={`flex h-full ${CELL_MIN_H_MOBILE} ${CELL_MIN_W_MOBILE} w-full items-center justify-center rounded-lg border border-dashed border-slate-200 px-2 py-1.5 text-slate-300 transition hover:border-navy-400 hover:text-navy-500 dark:border-gray-600 dark:text-gray-600 dark:hover:border-navy-400 dark:hover:text-navy-300`}
         title="Criar refeição"
       >
         +
@@ -552,7 +557,7 @@ function GridCell({
   }
   return (
     <div
-      className={`${CELL_MIN_H_MOBILE} rounded-lg border px-1.5 py-1.5 transition ${
+      className={`${CELL_MIN_H_MOBILE} ${CELL_MIN_W_MOBILE} rounded-lg border px-1.5 py-1.5 transition ${
         slot.locked
           ? "border-slate-200 bg-slate-100 dark:border-gray-600 dark:bg-gray-700/50"
           : "border-slate-200 bg-white dark:border-gray-600 dark:bg-gray-700"
