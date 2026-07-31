@@ -11,6 +11,7 @@ import { apiFetch } from "@/lib/client";
 import { useToast } from "@/components/Toast";
 
 interface LateMark {
+  id: string; // id da linha em meal_marks (p/ aprovação individual)
   number: string;
   name: string;
   squadron: number;
@@ -88,15 +89,17 @@ export default function LateApprovals({ from, to, onApproved }: Props) {
     load();
   }, [load]);
 
-  // Aprova as pendentes das refeições informadas (uma refeição ou todas).
-  async function approve(slotIds: string[]) {
-    if (slotIds.length === 0) return;
+  // Aprova por refeição (slot_ids: uma ou todas) ou individual (mark_ids).
+  async function approve(payload: { slot_ids?: string[]; mark_ids?: string[] }) {
+    const count =
+      (payload.slot_ids?.length ?? 0) + (payload.mark_ids?.length ?? 0);
+    if (count === 0) return;
     setBusy(true);
     try {
       const res = await apiFetch("/api/marks/late/approve", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slot_ids: slotIds }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
@@ -145,7 +148,7 @@ export default function LateApprovals({ from, to, onApproved }: Props) {
           <button
             className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40"
             disabled={busy || pendingSlotIds.length === 0}
-            onClick={() => approve(pendingSlotIds)}
+            onClick={() => approve({ slot_ids: pendingSlotIds })}
             title="Aprovar todas as pendentes de todas as refeições do período"
           >
             ✓ Aprovar todas (todas as refeições)
@@ -167,11 +170,21 @@ export default function LateApprovals({ from, to, onApproved }: Props) {
             const isOpen = open.has(s.slot_id);
             return (
               <li key={s.slot_id}>
-                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-                  <button
-                    className="flex min-w-0 items-center gap-2 text-left"
-                    onClick={() => toggleOpen(s.slot_id)}
-                  >
+                {/* Retângulo inteiro clicável: abre/fecha a lista de solicitações. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isOpen}
+                  className="flex cursor-pointer select-none flex-wrap items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-gray-800/40"
+                  onClick={() => toggleOpen(s.slot_id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleOpen(s.slot_id);
+                    }
+                  }}
+                >
+                  <div className="flex min-w-0 items-center gap-2 text-left">
                     <span
                       className={`text-slate-400 transition-transform ${
                         isOpen ? "rotate-90" : ""
@@ -187,7 +200,7 @@ export default function LateApprovals({ from, to, onApproved }: Props) {
                         {weekdayShort(s.date)}
                       </span>
                     </span>
-                  </button>
+                  </div>
                   <div className="flex items-center gap-2">
                     {s.pending > 0 && (
                       <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/40">
@@ -203,7 +216,10 @@ export default function LateApprovals({ from, to, onApproved }: Props) {
                       <button
                         className="btn-secondary px-2.5 py-1 text-xs disabled:opacity-40"
                         disabled={busy}
-                        onClick={() => approve([s.slot_id])}
+                        onClick={(e) => {
+                          e.stopPropagation(); // não fecha/abre o retângulo
+                          approve({ slot_ids: [s.slot_id] });
+                        }}
                         title="Aprovar todas as pendentes desta refeição"
                       >
                         ✓ Aprovar todas desta refeição
@@ -222,12 +238,13 @@ export default function LateApprovals({ from, to, onApproved }: Props) {
                           <th className="py-1.5 pr-3 font-semibold">Esq.</th>
                           <th className="py-1.5 pr-3 font-semibold">Justificativa</th>
                           <th className="py-1.5 pr-3 font-semibold">Marcou às</th>
-                          <th className="py-1.5 font-semibold">Situação</th>
+                          <th className="py-1.5 pr-3 font-semibold">Situação</th>
+                          <th className="py-1.5 font-semibold">Ação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
                         {s.marks.map((m) => (
-                          <tr key={m.number}>
+                          <tr key={m.id}>
                             <td className="py-1.5 pr-3 font-mono text-slate-500 dark:text-gray-400">
                               {m.number}
                             </td>
@@ -250,7 +267,7 @@ export default function LateApprovals({ from, to, onApproved }: Props) {
                             <td className="py-1.5 pr-3 text-slate-500 dark:text-gray-400">
                               {formatStamp(m.late_marked_at)}
                             </td>
-                            <td className="py-1.5">
+                            <td className="py-1.5 pr-3">
                               {m.approved ? (
                                 <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                                   ✓ Aprovada
@@ -259,6 +276,18 @@ export default function LateApprovals({ from, to, onApproved }: Props) {
                                 <span className="font-semibold text-amber-600 dark:text-amber-400">
                                   ⏳ Pendente
                                 </span>
+                              )}
+                            </td>
+                            <td className="py-1.5">
+                              {!m.approved && (
+                                <button
+                                  className="btn-secondary px-2.5 py-1 text-xs disabled:opacity-40"
+                                  disabled={busy}
+                                  onClick={() => approve({ mark_ids: [m.id] })}
+                                  title="Aprovar apenas este cadete"
+                                >
+                                  Aprovar
+                                </button>
                               )}
                             </td>
                           </tr>

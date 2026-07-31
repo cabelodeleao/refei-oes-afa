@@ -5,10 +5,9 @@ import { getSession } from "@/lib/auth";
 export const runtime = "nodejs";
 
 // PUT /api/marks/late/approve  (admin)
-// Body: { slot_ids: string[] }
-// Aprova (libera) TODAS as marcações de última hora pendentes das refeições
-// informadas de uma vez — não precisa aprovar cadete a cadete. Aprovadas, elas
-// passam a valer para a fiscalização por QR (entrada autorizada = VERDE).
+// Body: { slot_ids?: string[] }  -> aprova todas as pendentes dessas refeições
+//    ou { mark_ids?: string[] }  -> aprova marcações específicas (individual)
+// Aprovadas, elas passam a valer para a fiscalização por QR (entrada = VERDE).
 //
 // (Reversão/fluxos futuros: se um dia precisarem "desaprovar", basta um segundo
 //  endpoint espelhando este com late_approved=false — a coluna já existe.)
@@ -18,25 +17,35 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
-  let body: { slot_ids?: string[] };
+  let body: { slot_ids?: string[]; mark_ids?: string[] };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Requisição inválida" }, { status: 400 });
   }
 
-  const ids = body.slot_ids ?? [];
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return NextResponse.json({ error: "Nenhuma refeição informada" }, { status: 400 });
+  const slotIds = body.slot_ids ?? [];
+  const markIds = body.mark_ids ?? [];
+  const byMark = Array.isArray(markIds) && markIds.length > 0;
+  const bySlot = Array.isArray(slotIds) && slotIds.length > 0;
+
+  if (!byMark && !bySlot) {
+    return NextResponse.json(
+      { error: "Informe slot_ids ou mark_ids" },
+      { status: 400 }
+    );
   }
 
-  const { data, error } = await supabaseAdmin
+  // Aprova por linha específica (individual) ou por refeição inteira (lote),
+  // sempre restrito a marcações de última hora ainda pendentes.
+  let q = supabaseAdmin
     .from("meal_marks")
     .update({ late_approved: true })
-    .in("slot_id", ids)
     .eq("late_marking", true)
-    .eq("late_approved", false)
-    .select("id");
+    .eq("late_approved", false);
+  q = byMark ? q.in("id", markIds) : q.in("slot_id", slotIds);
+
+  const { data, error } = await q.select("id");
 
   if (error) {
     return NextResponse.json(

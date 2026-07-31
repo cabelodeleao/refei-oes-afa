@@ -61,6 +61,7 @@ export async function GET(req: Request) {
       pending: number;
       approved: number;
       marks: Array<{
+        id: string; // id da linha em meal_marks (p/ aprovação individual)
         number: string;
         name: string;
         squadron: number;
@@ -90,6 +91,7 @@ export async function GET(req: Request) {
       bySlot.set(r.slot_id, g);
     }
     g.marks.push({
+      id: r.id,
       number: r.cadets.number,
       name: r.cadets.name,
       squadron: r.cadets.squadron,
