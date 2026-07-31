@@ -110,10 +110,17 @@ export async function GET(req: Request) {
   // opt-outs. O join com meal_slots evita carregar o histórico inteiro.
   const optInSet = new Set<string>(); // attending=true  (Sim em opcional)
   const optOutSet = new Set<string>(); // attending=false (Não em opt-out)
+  // Marcações de última hora do cadete: slot_id -> aprovada pelo admin?
+  const lateMap = new Map<string, boolean>();
   try {
-    const marks = await selectAll<{ slot_id: string; attending: boolean }>(
+    const marks = await selectAll<{
+      slot_id: string;
+      attending: boolean;
+      late_marking: boolean;
+      late_approved: boolean;
+    }>(
       "meal_marks",
-      "id, slot_id, attending, meal_slots!inner(date)",
+      "id, slot_id, attending, late_marking, late_approved, meal_slots!inner(date)",
       (q) => {
         q = q.eq("cadet_id", session.sub);
         return history
@@ -124,6 +131,7 @@ export async function GET(req: Request) {
     for (const m of marks) {
       if (m.attending) optInSet.add(m.slot_id);
       else optOutSet.add(m.slot_id);
+      if (m.late_marking) lateMap.set(m.slot_id, m.late_approved);
     }
   } catch {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
@@ -157,6 +165,10 @@ export async function GET(req: Request) {
         close_date: closeLockDate(s.date),
         access: s.access, // "opcional" | "todos"
         marked,
+        // Marcação de última hora do cadete: fica amarela (pendente) até o
+        // admin aprovar, quando vira azul (marcação normal).
+        late: lateMap.has(s.id),
+        late_approved: lateMap.get(s.id) ?? false,
       };
     }),
   });

@@ -16,6 +16,15 @@ interface LateMark {
   squadron: number;
   late_marked_at: string | null;
   approved: boolean;
+  reason: "punido" | "outro" | null;
+  note: string | null;
+}
+
+// Texto da justificativa: "Punido" ou o texto livre quando o motivo é "outro".
+function reasonText(m: LateMark): string {
+  if (m.reason === "punido") return "Punido";
+  if (m.reason === "outro") return m.note?.trim() || "Outro";
+  return "—";
 }
 interface LateSlot {
   slot_id: string;
@@ -205,6 +214,7 @@ export default function LateApprovals({ from, to }: Props) {
                           <th className="py-1.5 pr-3 font-semibold">Número</th>
                           <th className="py-1.5 pr-3 font-semibold">Nome</th>
                           <th className="py-1.5 pr-3 font-semibold">Esq.</th>
+                          <th className="py-1.5 pr-3 font-semibold">Justificativa</th>
                           <th className="py-1.5 pr-3 font-semibold">Marcou às</th>
                           <th className="py-1.5 font-semibold">Situação</th>
                         </tr>
@@ -220,6 +230,16 @@ export default function LateApprovals({ from, to }: Props) {
                             </td>
                             <td className="py-1.5 pr-3 text-slate-500 dark:text-gray-400">
                               {SQUADRON_SHORT[m.squadron] ?? "—"}
+                            </td>
+                            <td className="py-1.5 pr-3 text-slate-600 dark:text-gray-300">
+                              {m.reason === "outro" ? (
+                                <span title={reasonText(m)}>
+                                  <span className="font-semibold">Outro:</span>{" "}
+                                  {reasonText(m)}
+                                </span>
+                              ) : (
+                                reasonText(m)
+                              )}
                             </td>
                             <td className="py-1.5 pr-3 text-slate-500 dark:text-gray-400">
                               {formatStamp(m.late_marked_at)}

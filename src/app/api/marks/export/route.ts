@@ -116,11 +116,13 @@ export async function GET(req: Request) {
     late_marking: boolean;
     late_approved: boolean;
     late_marked_at: string | null;
+    late_reason: "punido" | "outro" | null;
+    late_note: string | null;
   }>;
   try {
     marksData = await selectAll(
       "meal_marks",
-      "id, cadet_id, slot_id, attending, late_marking, late_approved, late_marked_at, meal_slots!inner(date)",
+      "id, cadet_id, slot_id, attending, late_marking, late_approved, late_marked_at, late_reason, late_note, meal_slots!inner(date)",
       (q) => {
         if (from) q = q.gte("meal_slots.date", from);
         if (to) q = q.lte("meal_slots.date", to);
@@ -158,6 +160,12 @@ export async function GET(req: Request) {
       slot: slotById.get(m.slot_id),
       approved: m.late_approved,
       at: m.late_marked_at,
+      reason:
+        m.late_reason === "punido"
+          ? "Punido"
+          : m.late_reason === "outro"
+          ? m.late_note?.trim() || "Outro"
+          : "—",
     }))
     .filter((r) => r.cadet && r.slot)
     .sort((a, b) => {
@@ -327,6 +335,7 @@ export async function GET(req: Request) {
       { header: "Esquadrão", key: "sq", width: 12 },
       { header: "Número", key: "number", width: 12 },
       { header: "Nome", key: "name", width: 26 },
+      { header: "Justificativa", key: "reason", width: 28 },
       { header: "Marcou às", key: "at", width: 16 },
       { header: "Situação", key: "status", width: 16 },
     ];
@@ -338,10 +347,11 @@ export async function GET(req: Request) {
         sq: SQUADRON_SHORT[r.cadet!.squadron] ?? "—",
         number: r.cadet!.number,
         name: r.cadet!.name,
+        reason: r.reason,
         at: formatStampSP(r.at),
         status: r.approved ? "Aprovada" : "Pendente",
       });
-      const statusCell = added.getCell(7);
+      const statusCell = added.getCell(8);
       statusCell.fill = solid(r.approved ? YES_FILL : LATE_FILL);
       statusCell.alignment = { horizontal: "center" };
     }

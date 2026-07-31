@@ -38,7 +38,9 @@ export async function GET(req: Request) {
 }
 
 // PUT /api/marks  — marca/desmarca uma refeição (cadete)
-// Body: { slot_id, marked }
+// Body: { slot_id, marked, reason?, note? }
+//   reason/note só são usados ao MARCAR na fase de segunda chance (última hora):
+//   reason = "punido" | "outro"; note = texto livre quando reason = "outro".
 export async function PUT(req: Request) {
   const session = await getSession();
   if (!session) {
@@ -51,7 +53,12 @@ export async function PUT(req: Request) {
     );
   }
 
-  let body: { slot_id?: string; marked?: boolean };
+  let body: {
+    slot_id?: string;
+    marked?: boolean;
+    reason?: string;
+    note?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -60,6 +67,8 @@ export async function PUT(req: Request) {
 
   const slotId = body.slot_id;
   const marked = body.marked === true;
+  const reason = body.reason === "punido" || body.reason === "outro" ? body.reason : null;
+  const note = typeof body.note === "string" ? body.note.trim() : "";
   if (!slotId) {
     return NextResponse.json({ error: "slot_id obrigatório" }, { status: 400 });
   }
@@ -139,6 +148,19 @@ export async function PUT(req: Request) {
         { status: 409 }
       );
     }
+    // Justificativa obrigatória na marcação de última hora.
+    if (!reason) {
+      return NextResponse.json(
+        { error: "Justificativa obrigatória para marcação de última hora" },
+        { status: 400 }
+      );
+    }
+    if (reason === "outro" && !note) {
+      return NextResponse.json(
+        { error: "Descreva a justificativa" },
+        { status: 400 }
+      );
+    }
     // Marcação de última hora: grava sempre uma linha attending=true com os
     // metadados de aprovação (independente do modo). Só vale para a fiscalização
     // após o admin aprovar (late_approved).
@@ -150,6 +172,8 @@ export async function PUT(req: Request) {
         late_marking: true,
         late_marked_at: new Date().toISOString(),
         late_approved: false,
+        late_reason: reason,
+        late_note: reason === "outro" ? note : null,
       },
       { onConflict: "cadet_id,slot_id" }
     );
@@ -176,6 +200,8 @@ export async function PUT(req: Request) {
         late_marking: false,
         late_marked_at: null,
         late_approved: false,
+        late_reason: null,
+        late_note: null,
       },
       { onConflict: "cadet_id,slot_id" }
     );

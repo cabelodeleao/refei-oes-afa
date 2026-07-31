@@ -11,6 +11,8 @@ interface LateRow {
   slot_id: string;
   late_marked_at: string | null;
   late_approved: boolean;
+  late_reason: "punido" | "outro" | null;
+  late_note: string | null;
   cadets: { number: string; name: string; squadron: number } | null;
   meal_slots: { date: string; meal_type: MealType } | null;
 }
@@ -34,7 +36,7 @@ export async function GET(req: Request) {
     // Paginado e filtrado pelo período via join em meal_slots.
     rows = await selectAll<LateRow>(
       "meal_marks",
-      "id, slot_id, late_marked_at, late_approved, cadets!inner(number, name, squadron), meal_slots!inner(date, meal_type)",
+      "id, slot_id, late_marked_at, late_approved, late_reason, late_note, cadets!inner(number, name, squadron), meal_slots!inner(date, meal_type)",
       (q) => {
         q = q.eq("late_marking", true);
         if (from) q = q.gte("meal_slots.date", from);
@@ -64,6 +66,8 @@ export async function GET(req: Request) {
         squadron: number;
         late_marked_at: string | null;
         approved: boolean;
+        reason: "punido" | "outro" | null;
+        note: string | null;
       }>;
     }
   >();
@@ -91,6 +95,8 @@ export async function GET(req: Request) {
       squadron: r.cadets.squadron,
       late_marked_at: r.late_marked_at,
       approved: r.late_approved,
+      reason: r.late_reason,
+      note: r.late_note,
     });
     if (r.late_approved) {
       g.approved += 1;

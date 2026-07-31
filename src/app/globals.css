@@ -469,6 +469,17 @@ body {
   border-radius: 20px;
   white-space: nowrap;
 }
+/* Pílula "⏳ Pendente" — marcação de última hora aguardando aprovação. */
+.cad-pill-late-pending {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #f0b428;
+  background: rgba(240, 180, 40, 0.14);
+  border: 1px solid rgba(240, 180, 40, 0.45);
+  padding: 2px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
 /* Aviso amarelo da fase de segunda chance dentro do card do dia. */
 .cad-late-warn {
   display: flex;
@@ -482,6 +493,33 @@ body {
   color: #f2d69a;
   font-size: 12.5px;
   line-height: 1.4;
+}
+/* Opção de justificativa (Punido / Outro) no modal de última hora. */
+.cad-just-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 14.5px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cad-just-opt.sel {
+  background: rgba(240, 180, 40, 0.12);
+  border-color: rgba(240, 180, 40, 0.5);
+  color: #f2d69a;
+}
+.cad-just-opt input {
+  width: 17px;
+  height: 17px;
+  accent-color: #f0b428;
+  cursor: pointer;
+  margin: 0;
 }
 .cad-pill-muted {
   font-size: 11.5px;

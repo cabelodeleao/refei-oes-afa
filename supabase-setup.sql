@@ -56,6 +56,8 @@ create table if not exists public.meal_slots (
 --   late_marking  = true  -> marcada na segunda chance (depois do prazo normal)
 --   late_marked_at        -> quando foi marcada de última hora
 --   late_approved = true  -> admin liberou; só então vale para a fiscalização
+--   late_reason           -> justificativa: 'punido' | 'outro'
+--   late_note             -> texto livre quando o motivo é 'outro'
 -- --------------------------------------------------------------------------
 create table if not exists public.meal_marks (
   id             uuid primary key default gen_random_uuid(),
@@ -65,6 +67,8 @@ create table if not exists public.meal_marks (
   late_marking   boolean not null default false,
   late_marked_at timestamptz,
   late_approved  boolean not null default false,
+  late_reason    text check (late_reason in ('punido', 'outro')),
+  late_note      text,
   created_at     timestamptz default now(),
   unique (cadet_id, slot_id)
 );

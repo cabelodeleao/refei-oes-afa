@@ -28,7 +28,12 @@ interface Slot {
   locked: boolean; // = phase "fechada" (compat)
   close_date: string; // último dia p/ marcar (1 dia antes, 23:59)
   marked: boolean;
+  late: boolean; // marcação de última hora (segunda chance)
+  late_approved: boolean; // já aprovada pelo admin? (aí vira azul)
 }
+
+// Justificativa de uma marcação de última hora.
+type LateReason = "punido" | "outro";
 
 interface Props {
   user: { name: string; number: string; squadron: number };
@@ -55,6 +60,8 @@ export default function CadeteClient({ user, qrToken }: Props) {
   const [error, setError] = useState("");
   const [pwOpen, setPwOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  // Refeição de última hora aguardando a justificativa do cadete (abre o modal).
+  const [justify, setJustify] = useState<Slot | null>(null);
 
   // Aba "Últimos 7 dias": consulta somente-leitura das refeições passadas
   // (carregada sob demanda na 1ª abertura e mantida em memória).
@@ -83,28 +90,59 @@ export default function CadeteClient({ user, qrToken }: Props) {
   // o próprio estado visual da refeição é o feedback. Só falhas geram aviso:
   // aí revertemos aquele toggle específico e mostramos um toast de erro.
   const saveMark = useCallback(
-    async (slotId: string, marked: boolean) => {
+    async (
+      slotId: string,
+      marked: boolean,
+      late?: { reason: LateReason; note: string }
+    ) => {
+      // Em erro, reverte este toggle: volta o "marked" e limpa flags de última
+      // hora (só teriam sido setadas otimisticamente numa marcação late).
+      const revert = () =>
+        setSlots((prev) =>
+          prev.map((s) =>
+            s.id === slotId
+              ? { ...s, marked: !marked, late: false, late_approved: false }
+              : s
+          )
+        );
       try {
         const res = await apiFetch("/api/marks", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slot_id: slotId, marked }),
+          body: JSON.stringify({
+            slot_id: slotId,
+            marked,
+            ...(late ? { reason: late.reason, note: late.note } : {}),
+          }),
         });
         if (!res.ok) {
-          setSlots((prev) =>
-            prev.map((s) => (s.id === slotId ? { ...s, marked: !marked } : s))
+          revert();
+          const data = await res.json().catch(() => null);
+          toast.error(
+            data?.error ?? "Não foi possível salvar uma refeição. Tente novamente."
           );
-          toast.error("Não foi possível salvar uma refeição. Tente novamente.");
         }
       } catch {
-        setSlots((prev) =>
-          prev.map((s) => (s.id === slotId ? { ...s, marked: !marked } : s))
-        );
+        revert();
         toast.error("Erro de conexão ao salvar.");
       }
     },
     [toast]
   );
+
+  // Confirma a marcação de última hora (após a justificativa no modal): UI
+  // otimista em AMARELO (pendente) + salva com a justificativa.
+  function confirmLate(slot: Slot, reason: LateReason, note: string) {
+    setSlots((prev) =>
+      prev.map((s) =>
+        s.id === slot.id
+          ? { ...s, marked: true, late: true, late_approved: false }
+          : s
+      )
+    );
+    void saveMark(slot.id, true, { reason, note });
+    setJustify(null);
+  }
 
   // Abre a aba de antigas; busca do servidor só na primeira vez.
   async function openHistory() {
@@ -158,6 +196,21 @@ export default function CadeteClient({ user, qrToken }: Props) {
     return slot.phase === "segunda_chance" && canMark(slot);
   }
 
+  // Marcação de última hora ainda pendente da aprovação do admin (fica amarela).
+  function isLatePending(slot: Slot): boolean {
+    return slot.marked && slot.late && !slot.late_approved;
+  }
+
+  // Clique numa refeição. Marcação de última hora abre o modal de justificativa
+  // (com o aviso) ANTES de marcar; o resto marca/desmarca direto.
+  function onMealClick(slot: Slot) {
+    if (isLateMarkable(slot)) {
+      setJustify(slot);
+      return;
+    }
+    applyMark(slot, !slot.marked);
+  }
+
   // Marca/desmarca uma refeição: UI otimista + SAVE imediato. Respeita a fase:
   // marcar exige canMark; desmarcar exige canUnmark.
   function applyMark(slot: Slot, next: boolean) {
@@ -170,11 +223,12 @@ export default function CadeteClient({ user, qrToken }: Props) {
     void saveMark(slot.id, next);
   }
 
-  // "Marcar todas" do dia: marca as que dá p/ marcar (checked) ou desmarca as
-  // que dá p/ desmarcar (só na fase aberta). Cada uma é salva imediatamente.
+  // "Marcar todas" do dia: só age nas refeições da fase ABERTA (marcar/desmarcar
+  // direto). As de última hora ficam de fora — cada uma exige justificativa
+  // individual pelo modal. Cada mudança é salva imediatamente.
   function toggleAllDay(daySlots: Slot[], checked: boolean) {
     const changed = daySlots.filter((s) =>
-      checked ? canMark(s) : canUnmark(s)
+      checked ? canMark(s) && !isLateMarkable(s) : canUnmark(s)
     );
     if (changed.length === 0) return;
     const ids = new Set(changed.map((s) => s.id));
@@ -198,8 +252,11 @@ export default function CadeteClient({ user, qrToken }: Props) {
   function dayCard(date: string, daySlots: Slot[], readOnly: boolean) {
     const markedCount = daySlots.filter((s) => s.marked).length;
     const [wd, dt] = formatLongDate(date).split(", ");
-    // Controláveis = dá p/ marcar OU desmarcar (para o "Todas" e seu estado).
-    const editable = daySlots.filter((s) => canMark(s) || canUnmark(s));
+    // Controláveis pelo "Todas": marcáveis da fase aberta ou desmarcáveis. As de
+    // última hora ficam de fora (exigem justificativa individual pelo modal).
+    const editable = daySlots.filter(
+      (s) => (canMark(s) && !isLateMarkable(s)) || canUnmark(s)
+    );
     const allMarked = editable.length > 0 && editable.every((s) => s.marked);
     const someMarked = editable.some((s) => s.marked);
     // Dia com refeições em segunda chance (marcação de última hora disponível).
@@ -244,42 +301,44 @@ export default function CadeteClient({ user, qrToken }: Props) {
             const slot = daySlots.find((s) => s.meal_type === mt)!;
             const strict = isStrict(slot);
             const lateMark = isLateMarkable(slot); // 2ª chance, ainda dá p/ marcar
+            const latePending = isLatePending(slot); // marcada, aguardando admin
             const clickable = canMark(slot) || canUnmark(slot);
 
             // Cor por situação (feedback redundante com o texto da pílula):
+            //  última hora pendente -> AMARELO (só vira azul quando o admin aprova)
             //  fechada  -> cinza (verde/vermelho conforme a escolha travada)
             //  estrita  -> verde "Obrigatória"
             //  2ª chance p/ marcar -> AMARELO (última hora)
             //  marcada  -> azul  ·  não marcada -> neutro
-            const stateClass =
-              slot.phase === "fechada"
-                ? `blocked ${slot.marked ? "blocked-yes" : "blocked-no"}`
-                : strict
-                ? "lock"
-                : lateMark
-                ? "late"
-                : slot.marked
-                ? "on"
-                : "off";
+            const stateClass = latePending
+              ? "late"
+              : slot.phase === "fechada"
+              ? `blocked ${slot.marked ? "blocked-yes" : "blocked-no"}`
+              : strict
+              ? "lock"
+              : lateMark
+              ? "late"
+              : slot.marked
+              ? "on"
+              : "off";
 
-            const right =
-              slot.phase === "fechada" ? (
-                <span
-                  className={
-                    slot.marked ? "cad-pill-lock-yes" : "cad-pill-lock-no"
-                  }
-                >
-                  🔒 {slot.marked ? "Sim" : "Não"}
-                </span>
-              ) : strict ? (
-                <span className="cad-pill-req">Obrigatória</span>
-              ) : lateMark ? (
-                <span className="cad-pill-late">Marcar</span>
-              ) : slot.marked ? (
-                <span className="cad-pill-box">✓</span>
-              ) : (
-                <span className="cad-pill-box" />
-              );
+            const right = latePending ? (
+              <span className="cad-pill-late-pending">⏳ Pendente</span>
+            ) : slot.phase === "fechada" ? (
+              <span
+                className={slot.marked ? "cad-pill-lock-yes" : "cad-pill-lock-no"}
+              >
+                🔒 {slot.marked ? "Sim" : "Não"}
+              </span>
+            ) : strict ? (
+              <span className="cad-pill-req">Obrigatória</span>
+            ) : lateMark ? (
+              <span className="cad-pill-late">Marcar</span>
+            ) : slot.marked ? (
+              <span className="cad-pill-box">✓</span>
+            ) : (
+              <span className="cad-pill-box" />
+            );
 
             const inner = (
               <>
@@ -298,7 +357,7 @@ export default function CadeteClient({ user, qrToken }: Props) {
                 key={slot.id}
                 type="button"
                 className={`cad-meal ${stateClass}`}
-                onClick={() => applyMark(slot, !slot.marked)}
+                onClick={() => onMealClick(slot)}
               >
                 {inner}
               </button>
@@ -452,6 +511,134 @@ export default function CadeteClient({ user, qrToken }: Props) {
 
       {/* Trocar senha (sheet escuro) */}
       {pwOpen && <ChangePasswordSheet onClose={() => setPwOpen(false)} />}
+
+      {/* Justificativa da marcação de última hora (segunda chance) */}
+      {justify && (
+        <LateJustifySheet
+          slot={justify}
+          onCancel={() => setJustify(null)}
+          onConfirm={(reason, note) => confirmLate(justify, reason, note)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+// Modal de justificativa da marcação de última hora. Mostra o AVISO antes de
+// confirmar e exige o motivo: "Punido" ou "Outro" (com texto livre).
+function LateJustifySheet({
+  slot,
+  onCancel,
+  onConfirm,
+}: {
+  slot: Slot;
+  onCancel: () => void;
+  onConfirm: (reason: LateReason, note: string) => void;
+}) {
+  const [reason, setReason] = useState<LateReason | null>(null);
+  const [note, setNote] = useState("");
+  const lastDay = slot.close_date;
+
+  const canConfirm =
+    reason === "punido" || (reason === "outro" && note.trim().length > 0);
+
+  function submit() {
+    if (!canConfirm || !reason) return;
+    onConfirm(reason, reason === "outro" ? note.trim() : "");
+  }
+
+  return (
+    <div className="cad-overlay" onClick={onCancel}>
+      <div
+        className="cad-sheet"
+        style={{ width: 380, maxWidth: "calc(100vw - 48px)", padding: 24 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between"
+          style={{ marginBottom: 14 }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--font-sora), Sora, sans-serif",
+              fontWeight: 600,
+              fontSize: 16,
+            }}
+          >
+            {MEAL_LABELS[slot.meal_type]} — última hora
+          </span>
+          <button
+            type="button"
+            className="cad-x"
+            onClick={onCancel}
+            aria-label="Fechar"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Aviso mantido, exibido ANTES de confirmar a marcação. */}
+        <div className="cad-late-warn" style={{ marginTop: 0 }}>
+          <span aria-hidden>⏰</span>
+          <span>
+            Marcação de última hora
+            {lastDay ? ` (até ${weekdayShort(lastDay)} 23:59)` : ""} — sujeita a
+            aprovação. Escolha a justificativa:
+          </span>
+        </div>
+
+        {/* Opções de justificativa (uma ou outra). */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          <label className={`cad-just-opt${reason === "punido" ? " sel" : ""}`}>
+            <input
+              type="checkbox"
+              checked={reason === "punido"}
+              onChange={() => setReason(reason === "punido" ? null : "punido")}
+            />
+            Punido
+          </label>
+          <label className={`cad-just-opt${reason === "outro" ? " sel" : ""}`}>
+            <input
+              type="checkbox"
+              checked={reason === "outro"}
+              onChange={() => setReason(reason === "outro" ? null : "outro")}
+            />
+            Outro
+          </label>
+          {reason === "outro" && (
+            <textarea
+              className="cad-field"
+              style={{ minHeight: 72, resize: "vertical" }}
+              placeholder="Descreva a justificativa"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              autoFocus
+            />
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button
+            type="button"
+            className="cad-btn"
+            style={{ flex: 1 }}
+            onClick={onCancel}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="cad-submit"
+            style={{ flex: 1, opacity: canConfirm ? 1 : 0.5 }}
+            disabled={!canConfirm}
+            onClick={submit}
+          >
+            Confirmar marcação
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
