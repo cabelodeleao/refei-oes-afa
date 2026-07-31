@@ -11,6 +11,7 @@ import {
 } from "@/lib/constants";
 import { formatShortDate, weekdayShort } from "@/lib/dates";
 import { apiFetch } from "@/lib/client";
+import LateApprovals from "./LateApprovals";
 
 interface CadetLite {
   number: string;
@@ -116,6 +117,8 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
           </button>
         </div>
       </section>
+
+      <LateApprovals from={from} to={to} />
 
       <section className="card overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-4 dark:border-gray-700">

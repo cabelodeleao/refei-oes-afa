@@ -15,14 +15,18 @@ import {
 import MenuBanner from "@/components/MenuBanner";
 import MyQrCode from "@/components/MyQrCode";
 import { useToast } from "@/components/Toast";
-import { formatLongDate } from "@/lib/dates";
+import { formatLongDate, weekdayShort } from "@/lib/dates";
+
+type Phase = "aberta" | "segunda_chance" | "fechada";
 
 interface Slot {
   id: string;
   date: string;
   meal_type: MealType;
   access: Exclude<AccessState, "ninguem">; // "opcional" | "todos"
-  locked: boolean;
+  phase: Phase;
+  locked: boolean; // = phase "fechada" (compat)
+  close_date: string; // último dia p/ marcar (1 dia antes, 23:59)
   marked: boolean;
 }
 
@@ -128,27 +132,50 @@ export default function CadeteClient({ user, qrToken }: Props) {
   // 3º/4º esquadrão podem desmarcar refeições "todos" (opt-out).
   const optOut = isOptOutSquadron(user.squadron);
 
-  // Pode alternar: opcional sempre; "todos" só p/ 3º/4º; nunca se bloqueado.
-  function canToggle(slot: Slot): boolean {
-    if (slot.locked) return false;
-    if (slot.access === "opcional") return true;
-    return optOut; // access === "todos"
+  // "todos" estrito (1º/2º) = obrigatória, o cadete nunca altera.
+  function isStrict(slot: Slot): boolean {
+    return slot.access === "todos" && !optOut;
   }
 
-  // Marca/desmarca uma refeição: UI otimista + SAVE imediato.
+  // Pode MARCAR (colocar "Sim") — vale na fase aberta E na segunda chance.
+  // Não vale para obrigatória estrita, refeição fechada, nem o que já está Sim.
+  function canMark(slot: Slot): boolean {
+    if (isStrict(slot)) return false;
+    if (slot.phase === "fechada") return false;
+    return !slot.marked;
+  }
+
+  // Pode DESMARCAR (colocar "Não") — SÓ na fase aberta (na segunda chance
+  // ninguém desmarca). Não vale para estrita nem para o que já está "Não".
+  function canUnmark(slot: Slot): boolean {
+    if (slot.phase !== "aberta") return false;
+    if (isStrict(slot)) return false;
+    return slot.marked;
+  }
+
+  // É uma marcação de última hora disponível? (segunda chance, ainda dá p/ marcar)
+  function isLateMarkable(slot: Slot): boolean {
+    return slot.phase === "segunda_chance" && canMark(slot);
+  }
+
+  // Marca/desmarca uma refeição: UI otimista + SAVE imediato. Respeita a fase:
+  // marcar exige canMark; desmarcar exige canUnmark.
   function applyMark(slot: Slot, next: boolean) {
-    if (!canToggle(slot) || slot.marked === next) return;
+    if (slot.marked === next) return;
+    if (next && !canMark(slot)) return;
+    if (!next && !canUnmark(slot)) return;
     setSlots((prev) =>
       prev.map((s) => (s.id === slot.id ? { ...s, marked: next } : s))
     );
     void saveMark(slot.id, next);
   }
 
-  // "Marcar todas": aplica a todas as refeições do dia que o cadete PODE alterar
-  // (opcionais sempre; obrigatórias só p/ 3º/4º; nunca as bloqueadas). Cada uma
-  // é salva imediatamente; o toast único sai 2s após o último save.
+  // "Marcar todas" do dia: marca as que dá p/ marcar (checked) ou desmarca as
+  // que dá p/ desmarcar (só na fase aberta). Cada uma é salva imediatamente.
   function toggleAllDay(daySlots: Slot[], checked: boolean) {
-    const changed = daySlots.filter((s) => canToggle(s) && s.marked !== checked);
+    const changed = daySlots.filter((s) =>
+      checked ? canMark(s) : canUnmark(s)
+    );
     if (changed.length === 0) return;
     const ids = new Set(changed.map((s) => s.id));
     setSlots((prev) =>
@@ -171,9 +198,13 @@ export default function CadeteClient({ user, qrToken }: Props) {
   function dayCard(date: string, daySlots: Slot[], readOnly: boolean) {
     const markedCount = daySlots.filter((s) => s.marked).length;
     const [wd, dt] = formatLongDate(date).split(", ");
-    const editable = daySlots.filter(canToggle);
+    // Controláveis = dá p/ marcar OU desmarcar (para o "Todas" e seu estado).
+    const editable = daySlots.filter((s) => canMark(s) || canUnmark(s));
     const allMarked = editable.length > 0 && editable.every((s) => s.marked);
     const someMarked = editable.some((s) => s.marked);
+    // Dia com refeições em segunda chance (marcação de última hora disponível).
+    const lateSlots = daySlots.filter(isLateMarkable);
+    const lastDay = lateSlots.length > 0 ? lateSlots[0].close_date : null;
     return (
       <div className="cad-day" key={date}>
         <div className="cad-day-head">
@@ -196,37 +227,59 @@ export default function CadeteClient({ user, qrToken }: Props) {
           </div>
         </div>
 
+        {/* Aviso da fase de segunda chance (marcação de última hora). */}
+        {!readOnly && lateSlots.length > 0 && (
+          <div className="cad-late-warn">
+            <span aria-hidden>⏰</span>
+            <span>
+              Marcação de última hora
+              {lastDay ? ` (até ${weekdayShort(lastDay)} 23:59)` : ""} — sujeita a
+              aprovação.
+            </span>
+          </div>
+        )}
+
         {MEAL_TYPES.filter((mt) => daySlots.some((s) => s.meal_type === mt)).map(
           (mt) => {
             const slot = daySlots.find((s) => s.meal_type === mt)!;
-            // "todos" estrito (1º/2º) = obrigatória, não clicável.
-            const strict = slot.access === "todos" && !optOut;
-            const clickable =
-              !slot.locked && (slot.access === "opcional" || optOut);
+            const strict = isStrict(slot);
+            const lateMark = isLateMarkable(slot); // 2ª chance, ainda dá p/ marcar
+            const clickable = canMark(slot) || canUnmark(slot);
 
-            // Bloqueada: além do cadeado, a cor identifica a escolha
-            // (verde = marcada "Sim", vermelho = "Não").
-            const stateClass = slot.locked
-              ? `blocked ${slot.marked ? "blocked-yes" : "blocked-no"}`
-              : strict
-              ? "lock"
-              : slot.marked
-              ? "on"
-              : "off";
+            // Cor por situação (feedback redundante com o texto da pílula):
+            //  fechada  -> cinza (verde/vermelho conforme a escolha travada)
+            //  estrita  -> verde "Obrigatória"
+            //  2ª chance p/ marcar -> AMARELO (última hora)
+            //  marcada  -> azul  ·  não marcada -> neutro
+            const stateClass =
+              slot.phase === "fechada"
+                ? `blocked ${slot.marked ? "blocked-yes" : "blocked-no"}`
+                : strict
+                ? "lock"
+                : lateMark
+                ? "late"
+                : slot.marked
+                ? "on"
+                : "off";
 
-            const right = slot.locked ? (
-              <span
-                className={slot.marked ? "cad-pill-lock-yes" : "cad-pill-lock-no"}
-              >
-                🔒 {slot.marked ? "Sim" : "Não"}
-              </span>
-            ) : strict ? (
-              <span className="cad-pill-req">Obrigatória</span>
-            ) : slot.marked ? (
-              <span className="cad-pill-box">✓</span>
-            ) : (
-              <span className="cad-pill-box" />
-            );
+            const right =
+              slot.phase === "fechada" ? (
+                <span
+                  className={
+                    slot.marked ? "cad-pill-lock-yes" : "cad-pill-lock-no"
+                  }
+                >
+                  🔒 {slot.marked ? "Sim" : "Não"}
+                </span>
+              ) : strict ? (
+                <span className="cad-pill-req">Obrigatória</span>
+              ) : lateMark ? (
+                <span className="cad-pill-late">Marcar</span>
+              ) : slot.marked ? (
+                <span className="cad-pill-box">✓</span>
+              ) : (
+                <span className="cad-pill-box" />
+              );
 
             const inner = (
               <>

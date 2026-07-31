@@ -95,9 +95,17 @@ export function nowSaoPauloStamp(): string {
 
 // Bloqueio automático: uma refeição fecha 4 dias antes da sua data, às 23:59
 // (horário de Brasília). Ex.: refeição de sexta -> fecha na segunda 23:59.
-// Retorna o carimbo "YYYY-MM-DDT23:59:00" desse instante.
+// Retorna o carimbo "YYYY-MM-DDT23:59:00" desse instante. É o INÍCIO da fase de
+// "segunda chance" (a partir daqui o cadete só pode marcar, não desmarcar).
 export function autoLockStamp(mealDateISO: string): string {
   const d = addDays(parseISODate(mealDateISO), -4);
+  return `${toISODate(d)}T23:59:00`;
+}
+
+// Fechamento definitivo: 1 dia antes da refeição, às 23:59 (horário de Brasília).
+// É o FIM da segunda chance — a partir daqui ninguém marca nem desmarca.
+export function closeLockStamp(mealDateISO: string): string {
+  const d = addDays(parseISODate(mealDateISO), -1);
   return `${toISODate(d)}T23:59:00`;
 }
 
@@ -107,7 +115,13 @@ export function autoLockDate(mealDateISO: string): string {
   return toISODate(addDays(parseISODate(mealDateISO), -4));
 }
 
-// A refeição já passou do prazo de bloqueio automático?
+// Data ISO em que a refeição fecha de vez (1 dia antes, 23:59). Fim da segunda
+// chance — útil para exibir "marca até qui 23:59".
+export function closeLockDate(mealDateISO: string): string {
+  return toISODate(addDays(parseISODate(mealDateISO), -1));
+}
+
+// A refeição já passou do prazo de bloqueio automático (início da segunda chance)?
 export function isAutoLocked(
   mealDateISO: string,
   nowStamp: string = nowSaoPauloStamp()
@@ -116,22 +130,42 @@ export function isAutoLocked(
 }
 
 // Intenção manual do admin sobre o bloqueio de uma refeição:
-//   null / undefined -> segue a regra automática (4 dias antes, 23:59)
-//   "bloqueado"      -> admin travou manualmente (independe da data)
-//   "desbloqueado"   -> admin abriu exceção: liberado mesmo que o automático
-//                       já bloquearia (o desbloqueio manual VENCE tudo)
+//   null / undefined -> segue a regra automática (as 3 fases abaixo)
+//   "bloqueado"      -> admin travou manualmente (fechada de vez, sem 2ª chance)
+//   "desbloqueado"   -> admin abriu exceção: marcação normal continua liberada
+//                       (o desbloqueio manual VENCE tudo)
 export type LockOverride = "bloqueado" | "desbloqueado" | null;
 
-// Regra final combinada: a refeição está bloqueada para marcação?
-//   desbloqueado -> nunca (exceção do admin vence)
-//   bloqueado    -> sempre
-//   automático   -> só depois do prazo de 4 dias
+// As três fases de uma refeição (fuso America/Sao_Paulo):
+//   "aberta"          -> marcar e desmarcar normalmente (até 4 dias antes, 23:59)
+//   "segunda_chance"  -> SÓ marcar, não desmarcar (de 4 dias antes até 1 dia
+//                        antes, 23:59); marcações aqui são "de última hora" e
+//                        precisam de aprovação do admin para valer
+//   "fechada"         -> nada mais pode ser feito (a partir de 1 dia antes, 23:59)
+export type MealPhase = "aberta" | "segunda_chance" | "fechada";
+
+// Fase atual de uma refeição, combinando o override manual do admin com o
+// calendário automático. Ver MealPhase.
+export function mealPhase(
+  lockOverride: LockOverride | string | null | undefined,
+  mealDateISO: string,
+  nowStamp: string = nowSaoPauloStamp()
+): MealPhase {
+  if (lockOverride === "desbloqueado") return "aberta"; // exceção do admin
+  if (lockOverride === "bloqueado") return "fechada"; // trava manual
+  if (nowStamp < autoLockStamp(mealDateISO)) return "aberta";
+  if (nowStamp < closeLockStamp(mealDateISO)) return "segunda_chance";
+  return "fechada";
+}
+
+// Regra combinada: a marcação está TRAVADA (não pode ser livremente editada)?
+// True nas fases "segunda_chance" e "fechada". Mantido para usos em que só
+// importa "está aberto para edição normal?" (ex.: resumo do admin). Para o
+// fluxo do cadete use mealPhase, que distingue a segunda chance.
 export function effectiveLocked(
   lockOverride: LockOverride | string | null | undefined,
   mealDateISO: string,
   nowStamp: string = nowSaoPauloStamp()
 ): boolean {
-  if (lockOverride === "desbloqueado") return false;
-  if (lockOverride === "bloqueado") return true;
-  return isAutoLocked(mealDateISO, nowStamp);
+  return mealPhase(lockOverride, mealDateISO, nowStamp) !== "aberta";
 }

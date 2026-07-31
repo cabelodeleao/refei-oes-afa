@@ -34,6 +34,7 @@ const HEADER_FILL = "FF112244";
 const TODOS_FILL = "FFD1FAE5"; // verde claro — refeição obrigatória ("todos")
 const YES_FILL = "FFECFDF5"; // verde bem claro — "Sim" (opcional marcado)
 const NINGUEM_FILL = "FFF1F5F9"; // cinza — esquadrão sem a refeição
+const LATE_FILL = "FFFEF3C7"; // amarelo — marcação de última hora (2ª chance)
 
 // GET /api/marks/export?from=YYYY-MM-DD&to=YYYY-MM-DD  (admin)
 export async function GET(req: Request) {
@@ -94,6 +95,10 @@ export async function GET(req: Request) {
 
   const cadetSquadron = new Map<string, number>();
   for (const c of cadets) cadetSquadron.set(c.id, c.squadron);
+  const cadetById = new Map<string, CadetRow>();
+  for (const c of cadets) cadetById.set(c.id, c);
+  const slotById = new Map<string, SlotRow>();
+  for (const s of slots) slotById.set(s.id, s);
 
   const bySquadron = new Map<number, CadetRow[]>();
   for (const sq of ALL_SQUADRONS) bySquadron.set(sq, []);
@@ -104,11 +109,18 @@ export async function GET(req: Request) {
 
   // --- Marcações (escolhas explícitas): opt-in (attending=true) e opt-out (false).
   // Paginado e filtrado pelo período via join em meal_slots (evita IN gigante).
-  let marksData: Array<{ cadet_id: string; slot_id: string; attending: boolean }>;
+  let marksData: Array<{
+    cadet_id: string;
+    slot_id: string;
+    attending: boolean;
+    late_marking: boolean;
+    late_approved: boolean;
+    late_marked_at: string | null;
+  }>;
   try {
     marksData = await selectAll(
       "meal_marks",
-      "id, cadet_id, slot_id, attending, meal_slots!inner(date)",
+      "id, cadet_id, slot_id, attending, late_marking, late_approved, late_marked_at, meal_slots!inner(date)",
       (q) => {
         if (from) q = q.gte("meal_slots.date", from);
         if (to) q = q.lte("meal_slots.date", to);
@@ -122,6 +134,8 @@ export async function GET(req: Request) {
   const optOutSet = new Set<string>(); // "cadetId|slotId" attending=false ("Não")
   const optInCount = new Map<string, number>(); // "slotId|sq" -> nº opt-in
   const optOutCount = new Map<string, number>(); // "slotId|sq" -> nº opt-out
+  // Marcações de última hora (segunda chance): "cadetId|slotId" -> aprovada?
+  const lateInfo = new Map<string, boolean>();
   for (const m of marksData) {
     const key = `${m.cadet_id}|${m.slot_id}`;
     const sq = cadetSquadron.get(m.cadet_id);
@@ -133,7 +147,30 @@ export async function GET(req: Request) {
       optOutSet.add(key);
       if (sq) optOutCount.set(ckey, (optOutCount.get(ckey) ?? 0) + 1);
     }
+    if (m.late_marking) lateInfo.set(key, m.late_approved);
   }
+
+  // Lista de marcações de última hora (para a aba dedicada), ordenada.
+  const lateRows = marksData
+    .filter((m) => m.late_marking)
+    .map((m) => ({
+      cadet: cadetById.get(m.cadet_id),
+      slot: slotById.get(m.slot_id),
+      approved: m.late_approved,
+      at: m.late_marked_at,
+    }))
+    .filter((r) => r.cadet && r.slot)
+    .sort((a, b) => {
+      if (a.slot!.date !== b.slot!.date)
+        return a.slot!.date.localeCompare(b.slot!.date);
+      const mt =
+        MEAL_TYPES.indexOf(a.slot!.meal_type) -
+        MEAL_TYPES.indexOf(b.slot!.meal_type);
+      if (mt !== 0) return mt;
+      if (a.cadet!.squadron !== b.cadet!.squadron)
+        return a.cadet!.squadron - b.cadet!.squadron;
+      return a.cadet!.number.localeCompare(b.cadet!.number);
+    });
 
   // Nº de cadetes que comem em (slot, esquadrão), conforme o modo.
   const eatNumber = (s: SlotRow, sq: number): number => {
@@ -223,21 +260,41 @@ export async function GET(req: Request) {
       };
       for (const s of sheetSlots) {
         const state = getAccess(s.squadrons, sq);
+        const key = `${c.id}|${s.id}`;
+        const late = lateInfo.get(key); // undefined = não é última hora
         if (state === "todos" && !isOptOutSquadron(sq)) {
           // 1º/2º: obrigatória estrita.
           row[s.id] = "Obrigatória";
         } else if (state === "todos") {
           // 3º/4º: default "Sim", "Não" se desmarcou.
-          row[s.id] = optOutSet.has(`${c.id}|${s.id}`) ? "Não" : "Sim";
+          const attending = !optOutSet.has(key);
+          row[s.id] =
+            attending && late !== undefined
+              ? late
+                ? "Última hora (aprov.)"
+                : "Última hora (pend.)"
+              : attending
+              ? "Sim"
+              : "Não";
         } else {
           // opcional: "Sim" se marcou (opt-in).
-          row[s.id] = optInSet.has(`${c.id}|${s.id}`) ? "Sim" : "Não";
+          const attending = optInSet.has(key);
+          row[s.id] =
+            attending && late !== undefined
+              ? late
+                ? "Última hora (aprov.)"
+                : "Última hora (pend.)"
+              : attending
+              ? "Sim"
+              : "Não";
         }
       }
       const added = ws.addRow(row);
-      sheetSlots.forEach((_, i) => {
+      sheetSlots.forEach((s, i) => {
         const cell = added.getCell(3 + i);
-        if (cell.value === "Obrigatória") cell.fill = solid(TODOS_FILL);
+        const late = lateInfo.get(`${c.id}|${s.id}`);
+        if (late !== undefined && cell.value !== "Não") cell.fill = solid(LATE_FILL);
+        else if (cell.value === "Obrigatória") cell.fill = solid(TODOS_FILL);
         else if (cell.value === "Sim") cell.fill = solid(YES_FILL);
         cell.alignment = { horizontal: "center" };
       });
@@ -259,6 +316,37 @@ export async function GET(req: Request) {
     });
   }
 
+  // --- Aba "Última hora" (marcações da segunda chance) ---
+  if (lateRows.length > 0) {
+    const ws = wb.addWorksheet("Última hora", {
+      views: [{ state: "frozen", ySplit: 1 }],
+    });
+    ws.columns = [
+      { header: "Data", key: "date", width: 12 },
+      { header: "Refeição", key: "meal", width: 12 },
+      { header: "Esquadrão", key: "sq", width: 12 },
+      { header: "Número", key: "number", width: 12 },
+      { header: "Nome", key: "name", width: 26 },
+      { header: "Marcou às", key: "at", width: 16 },
+      { header: "Situação", key: "status", width: 16 },
+    ];
+    styleHeaderRow(ws.getRow(1));
+    for (const r of lateRows) {
+      const added = ws.addRow({
+        date: formatShortDate(r.slot!.date),
+        meal: MEAL_SHORT[r.slot!.meal_type],
+        sq: SQUADRON_SHORT[r.cadet!.squadron] ?? "—",
+        number: r.cadet!.number,
+        name: r.cadet!.name,
+        at: formatStampSP(r.at),
+        status: r.approved ? "Aprovada" : "Pendente",
+      });
+      const statusCell = added.getCell(7);
+      statusCell.fill = solid(r.approved ? YES_FILL : LATE_FILL);
+      statusCell.alignment = { horizontal: "center" };
+    }
+  }
+
   const buffer = await wb.xlsx.writeBuffer();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -271,6 +359,22 @@ export async function GET(req: Request) {
       "Cache-Control": "no-store",
     },
   });
+}
+
+// Horário da marcação de última hora no fuso de Brasília: "dd/mm HH:mm".
+function formatStampSP(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return "—";
+  }
 }
 
 // ----------------------- helpers de estilo -----------------------

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { getAccess, isOptOutSquadron } from "@/lib/constants";
-import { todaySaoPaulo, effectiveLocked } from "@/lib/dates";
+import { todaySaoPaulo, mealPhase } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -77,16 +77,9 @@ export async function PUT(req: Request) {
   if (!slot) {
     return NextResponse.json({ error: "Refeição não encontrada" }, { status: 404 });
   }
-  // Bloqueio combinado: manual do admin OU automático de 4 dias (o desbloqueio
-  // manual do admin vence e libera). Ver effectiveLocked em @/lib/dates.
-  if (effectiveLocked(slot.lock_override, slot.date)) {
-    return NextResponse.json(
-      { error: "Esta refeição já está bloqueada para marcação" },
-      { status: 409 }
-    );
-  }
-  // Refeição de dia que já passou não pode mais ser alterada (impede, por
-  // exemplo, desmarcar retroativamente para sumir da lista de faltas).
+  // Refeição de dia que já passou nunca pode ser alterada (impede, por exemplo,
+  // desmarcar retroativamente para sumir da lista de faltas). Regra absoluta,
+  // independente do override do admin.
   if (slot.date < todaySaoPaulo()) {
     return NextResponse.json(
       { error: "Refeição de dia que já passou — não é possível alterar" },
@@ -110,7 +103,63 @@ export async function PUT(req: Request) {
   }
 
   const isOptOut = access === "todos"; // aqui só chega 3º/4º (estrito já barrado)
+  const phase = mealPhase(slot.lock_override, slot.date);
 
+  // Fase fechada: nada pode ser feito.
+  if (phase === "fechada") {
+    return NextResponse.json(
+      { error: "Esta refeição está fechada para marcação" },
+      { status: 409 }
+    );
+  }
+
+  // Estado atual do cadete (linha explícita ou default do modo).
+  const { data: existingRow, error: rowErr } = await supabaseAdmin
+    .from("meal_marks")
+    .select("attending, late_marking")
+    .eq("cadet_id", session.sub)
+    .eq("slot_id", slotId)
+    .maybeSingle();
+  if (rowErr) {
+    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+  }
+  const defaultAttending = isOptOut ? true : false; // opcional=>Não, opt-out=>Sim
+  const currentAttending = existingRow ? existingRow.attending : defaultAttending;
+
+  // ---- Fase de segunda chance: SÓ pode marcar (aumentar presença) ----------
+  if (phase === "segunda_chance") {
+    if (marked === currentAttending) {
+      // Sem mudança — idempotente.
+      return NextResponse.json({ ok: true, slot_id: slotId, marked });
+    }
+    if (!marked) {
+      // Tentou desmarcar depois do prazo: proibido.
+      return NextResponse.json(
+        { error: "Não é possível desmarcar após o prazo" },
+        { status: 409 }
+      );
+    }
+    // Marcação de última hora: grava sempre uma linha attending=true com os
+    // metadados de aprovação (independente do modo). Só vale para a fiscalização
+    // após o admin aprovar (late_approved).
+    const { error } = await supabaseAdmin.from("meal_marks").upsert(
+      {
+        cadet_id: session.sub,
+        slot_id: slotId,
+        attending: true,
+        late_marking: true,
+        late_marked_at: new Date().toISOString(),
+        late_approved: false,
+      },
+      { onConflict: "cadet_id,slot_id" }
+    );
+    if (error) {
+      return NextResponse.json({ error: "Erro ao salvar" }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, slot_id: slotId, marked, late: true });
+  }
+
+  // ---- Fase aberta: marcar/desmarcar normalmente ---------------------------
   // Modelo de armazenamento (uma linha = escolha explícita):
   //  - opcional: "Sim" => linha attending=true; "Não" => sem linha (default Não).
   //  - opt-out:  "Sim" => sem linha (default Sim);  "Não" => linha attending=false.
@@ -118,12 +167,18 @@ export async function PUT(req: Request) {
   const attending = marked; // a escolha do cadete
 
   if (storeRow) {
-    const { error } = await supabaseAdmin
-      .from("meal_marks")
-      .upsert(
-        { cadet_id: session.sub, slot_id: slotId, attending },
-        { onConflict: "cadet_id,slot_id" }
-      );
+    // Volta a ser marcação NORMAL: zera qualquer flag de última hora anterior.
+    const { error } = await supabaseAdmin.from("meal_marks").upsert(
+      {
+        cadet_id: session.sub,
+        slot_id: slotId,
+        attending,
+        late_marking: false,
+        late_marked_at: null,
+        late_approved: false,
+      },
+      { onConflict: "cadet_id,slot_id" }
+    );
     if (error) {
       return NextResponse.json({ error: "Erro ao salvar" }, { status: 500 });
     }

@@ -18,7 +18,9 @@ import {
   nowSaoPauloStamp,
   isAutoLocked,
   effectiveLocked,
+  mealPhase,
   autoLockDate,
+  closeLockDate,
   type LockOverride,
 } from "@/lib/dates";
 
@@ -140,17 +142,19 @@ export async function GET(req: Request) {
       } else {
         marked = true; // "todos" estrito (1º/2º)
       }
+      // Fase da refeição para o cadete. Histórico é somente consulta e dias
+      // passados nunca são editáveis (o PUT /api/marks também rejeita) — nesses
+      // casos forçamos "fechada".
+      let phase = mealPhase(s.lock_override, s.date, now);
+      if (history || s.date < today) phase = "fechada";
       return {
         id: s.id,
         date: s.date,
         meal_type: s.meal_type,
-        // Bloqueio efetivo (manual do admin OU automático de 4 dias). Histórico
-        // é somente consulta e dias passados nunca são editáveis — o servidor
-        // também rejeita essas alterações no PUT /api/marks.
-        locked:
-          effectiveLocked(s.lock_override, s.date, now) ||
-          history ||
-          s.date < today,
+        phase, // "aberta" | "segunda_chance" | "fechada"
+        locked: phase === "fechada", // compat: totalmente travada
+        // Fim da segunda chance (quando trava de vez): "marca até qui 23:59".
+        close_date: closeLockDate(s.date),
         access: s.access, // "opcional" | "todos"
         marked,
       };

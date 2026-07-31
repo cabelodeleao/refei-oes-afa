@@ -116,11 +116,13 @@ export async function POST(req: Request) {
     access === "opcional" ||
     (access === "todos" && isOptOutSquadron(cadet.squadron));
 
-  let mark: { attending: boolean } | null = null;
+  let mark:
+    | { attending: boolean; late_marking: boolean; late_approved: boolean }
+    | null = null;
   if (needsMark) {
     const { data, error: markErr } = await supabaseAdmin
       .from("meal_marks")
-      .select("attending")
+      .select("attending, late_marking, late_approved")
       .eq("cadet_id", cadet.id)
       .eq("slot_id", slotId)
       .maybeSingle();
@@ -143,6 +145,14 @@ export async function POST(req: Request) {
   } else {
     // "todos" 1º/2º: obrigatória estrita, sempre autorizado.
     authorized = true;
+  }
+
+  // Marcação de última hora (segunda chance) só vale APÓS o admin aprovar. Até
+  // lá, mesmo estando na lista, a entrada não é autorizada (horário extra ainda
+  // não liberado).
+  if (authorized && mark?.late_marking === true && mark?.late_approved !== true) {
+    authorized = false;
+    reason = "Última hora — aguardando aprovação do admin";
   }
 
   if (!authorized) {

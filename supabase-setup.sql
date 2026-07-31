@@ -51,13 +51,21 @@ create table if not exists public.meal_slots (
 --   attending = true  -> opt-in  ("Sim" em refeição opcional)
 --   attending = false -> opt-out ("Não" em refeição "todos" p/ 3º e 4º esq.)
 -- Sem linha = default do modo (opcional => "Não"; "todos" => "Sim").
+--
+-- Marcação de última hora (fase de "segunda chance", de 4 a 1 dia antes):
+--   late_marking  = true  -> marcada na segunda chance (depois do prazo normal)
+--   late_marked_at        -> quando foi marcada de última hora
+--   late_approved = true  -> admin liberou; só então vale para a fiscalização
 -- --------------------------------------------------------------------------
 create table if not exists public.meal_marks (
-  id         uuid primary key default gen_random_uuid(),
-  cadet_id   uuid not null references public.cadets(id) on delete cascade,
-  slot_id    uuid not null references public.meal_slots(id) on delete cascade,
-  attending  boolean not null default true,
-  created_at timestamptz default now(),
+  id             uuid primary key default gen_random_uuid(),
+  cadet_id       uuid not null references public.cadets(id) on delete cascade,
+  slot_id        uuid not null references public.meal_slots(id) on delete cascade,
+  attending      boolean not null default true,
+  late_marking   boolean not null default false,
+  late_marked_at timestamptz,
+  late_approved  boolean not null default false,
+  created_at     timestamptz default now(),
   unique (cadet_id, slot_id)
 );
 
@@ -118,6 +126,7 @@ create table if not exists public.menu_photos (
 create index if not exists idx_meal_slots_date   on public.meal_slots (date);
 create index if not exists idx_meal_marks_slot   on public.meal_marks (slot_id);
 create index if not exists idx_meal_marks_cadet  on public.meal_marks (cadet_id);
+create index if not exists idx_meal_marks_late   on public.meal_marks (late_marking, late_approved);
 create index if not exists idx_meal_entries_slot  on public.meal_entries (slot_id);
 create index if not exists idx_meal_entries_cadet on public.meal_entries (cadet_id);
 create index if not exists idx_cadets_is_fiscal   on public.cadets (is_fiscal);

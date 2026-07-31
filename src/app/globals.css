@@ -413,6 +413,15 @@ body {
   border-color: rgba(255, 90, 90, 0.22);
   color: #9aa2b1;
 }
+/* Segunda chance: marcação de última hora ainda disponível (AMARELO). */
+.cad-meal.late {
+  background: rgba(240, 180, 40, 0.1);
+  border-color: rgba(240, 180, 40, 0.42);
+  color: #f2d69a;
+}
+.cad-meal.late .cad-meal-ic {
+  background: rgba(240, 180, 40, 0.2);
+}
 .cad-meal.off .cad-meal-ic {
   background: rgba(255, 255, 255, 0.05);
 }
@@ -449,6 +458,30 @@ body {
   font-weight: 600;
   color: #5fd0a0;
   white-space: nowrap;
+}
+/* Pílula "Marcar" das refeições de última hora (segunda chance, amarelo). */
+.cad-pill-late {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1f2430;
+  background: #f0b428;
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+/* Aviso amarelo da fase de segunda chance dentro do card do dia. */
+.cad-late-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 2px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  background: rgba(240, 180, 40, 0.1);
+  border: 1px solid rgba(240, 180, 40, 0.35);
+  color: #f2d69a;
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 .cad-pill-muted {
   font-size: 11.5px;
