@@ -365,6 +365,183 @@ export async function GET(req: Request) {
     }
   }
 
+  // ===================== Fiscalização manual (aba "Conferência") ============
+  // Para os dias de muito movimento em que o QR fica lento: o sargento digita o
+  // NÚMERO (com ou sem barra) ou o NOME do cadete e, na coluna ao lado, aparece
+  // se ele pode entrar naquela refeição. As fórmulas consultam a aba oculta
+  // "Dados" (uma linha por cadete, uma coluna por refeição).
+  {
+    // Cadetes ordenados por esquadrão e número (base de consulta).
+    const roster = [...cadets].sort((a, b) =>
+      a.squadron !== b.squadron
+        ? a.squadron - b.squadron
+        : a.number.localeCompare(b.number)
+    );
+
+    // Situação de um cadete numa refeição: "Sim" (pode entrar), "Não",
+    // "Obrigatória" ou "—" (esquadrão sem a refeição). Última hora só conta se
+    // aprovada (mesma regra da fiscalização por QR).
+    const statusFor = (c: CadetRow, s: SlotRow): string => {
+      const state = getAccess(s.squadrons, c.squadron);
+      if (state === "ninguem") return "—";
+      const key = `${c.id}|${s.id}`;
+      const pending = lateInfo.get(key) === false; // última hora não aprovada
+      if (state === "todos") {
+        if (!isOptOutSquadron(c.squadron)) return "Obrigatória";
+        return !optOutSet.has(key) && !pending ? "Sim" : "Não";
+      }
+      return optInSet.has(key) && !pending ? "Sim" : "Não"; // opcional
+    };
+
+    // --- Aba de dados (OCULTA): base das fórmulas de consulta ---
+    const dados = wb.addWorksheet("Dados");
+    dados.state = "hidden";
+    dados.columns = [
+      { header: "Número", key: "num", width: 12 },
+      { header: "Nome", key: "nome", width: 26 },
+      { header: "Esq", key: "esq", width: 10 },
+      { header: "NúmeroNorm", key: "norm", width: 12 },
+      ...slots.map((s) => ({ header: slotHeader(s), key: s.id, width: 16 })),
+    ];
+    styleHeaderRow(dados.getRow(1));
+    for (const c of roster) {
+      const row: Record<string, string> = {
+        num: c.number,
+        nome: c.name,
+        esq: SQUADRON_SHORT[c.squadron] ?? "—",
+        norm: c.number.replace(/\D/g, ""), // só dígitos, p/ casar "25200"/"25/200"
+      };
+      for (const s of slots) row[s.id] = statusFor(c, s);
+      dados.addRow(row);
+    }
+
+    // Faixa das colunas de refeição em Dados (E1 .. última), p/ o dropdown.
+    const firstMeal = colLetter(5); // E
+    const lastMeal = colLetter(4 + slots.length);
+    const mealRange = `Dados!$${firstMeal}$1:$${lastMeal}$1`;
+
+    // --- Aba de conferência (onde o sargento trabalha) ---
+    const conf = wb.addWorksheet("Conferência", {
+      views: [{ state: "frozen", ySplit: 4 }],
+    });
+    conf.getColumn(1).width = 24;
+    conf.getColumn(2).width = 12;
+    conf.getColumn(3).width = 30;
+    conf.getColumn(4).width = 8;
+    conf.getColumn(5).width = 18;
+
+    const title = conf.getCell("A1");
+    title.value = "Conferência de entrada (quando o QR estiver lento)";
+    title.font = { bold: true, size: 13 };
+
+    conf.getCell("A2").value = "Refeição a conferir:";
+    conf.getCell("A2").font = { bold: true };
+    const mealCell = conf.getCell("B2");
+    mealCell.value = slotHeader(slots[0]); // padrão: 1ª refeição
+    mealCell.font = { bold: true, color: { argb: "FF1D4ED8" } };
+    mealCell.fill = solid("FFEFF6FF");
+    mealCell.dataValidation = {
+      type: "list",
+      allowBlank: false,
+      formulae: [mealRange],
+      showErrorMessage: true,
+      errorTitle: "Refeição inválida",
+      error: "Escolha uma refeição da lista.",
+    };
+
+    conf.getCell("A3").value =
+      "Digite o NÚMERO (ex.: 25200 ou 25/200) ou o NOME do cadete na coluna abaixo. A situação aparece ao lado.";
+    conf.getCell("A3").font = { italic: true, color: { argb: "FF64748B" } };
+
+    // Índice da coluna da refeição escolhida (auxiliar, coluna H oculta).
+    conf.getCell("H2").value = {
+      formula: "IFERROR(MATCH($B$2,Dados!$1:$1,0),0)",
+      result: 5,
+    };
+
+    // Cabeçalho da tabela (linha 4).
+    const head = conf.getRow(4);
+    head.getCell(1).value = "Nº ou Nome";
+    head.getCell(2).value = "Número";
+    head.getCell(3).value = "Cadete";
+    head.getCell(4).value = "Esq";
+    head.getCell(5).value = "Situação";
+    styleHeaderRow(head);
+
+    const FIRST = 5;
+    const LAST = 704; // ~700 linhas de conferência
+    const thin = { style: "thin" as const, color: { argb: "FFE2E8F0" } };
+    for (let r = FIRST; r <= LAST; r++) {
+      // rIdx (col H, oculta): tenta número sem barra, nome exato, nome "começa com".
+      conf.getCell(`H${r}`).value = {
+        formula:
+          `IF(TRIM($A${r})="","",IFERROR(MATCH(SUBSTITUTE(TRIM($A${r}),"/",""),Dados!$D:$D,0),` +
+          `IFERROR(MATCH(TRIM($A${r}),Dados!$B:$B,0),IFERROR(MATCH(TRIM($A${r})&"*",Dados!$B:$B,0),0))))`,
+        result: "",
+      };
+      conf.getCell(`B${r}`).value = {
+        formula: `IF($H${r}="","",IF($H${r}=0,"não encontrado",INDEX(Dados!$A:$XFD,$H${r},1)))`,
+        result: "",
+      };
+      conf.getCell(`C${r}`).value = {
+        formula: `IF(OR($H${r}="",$H${r}=0),"",INDEX(Dados!$A:$XFD,$H${r},2))`,
+        result: "",
+      };
+      conf.getCell(`D${r}`).value = {
+        formula: `IF(OR($H${r}="",$H${r}=0),"",INDEX(Dados!$A:$XFD,$H${r},3))`,
+        result: "",
+      };
+      conf.getCell(`E${r}`).value = {
+        formula: `IF(OR($H${r}="",$H${r}=0),"",IF($H$2=0,"escolha a refeição",INDEX(Dados!$A:$XFD,$H${r},$H$2)))`,
+        result: "",
+      };
+      for (let col = 1; col <= 5; col++) {
+        const cell = conf.getCell(r, col);
+        cell.border = { top: thin, left: thin, bottom: thin, right: thin };
+        if (col >= 2) cell.alignment = { horizontal: "center" };
+      }
+    }
+
+    conf.getColumn(8).hidden = true; // coluna auxiliar H
+
+    // Cores da Situação: verde = pode entrar (Sim/Obrigatória), vermelho = Não.
+    conf.addConditionalFormatting({
+      ref: `E${FIRST}:E${LAST}`,
+      rules: [
+        {
+          type: "containsText",
+          operator: "containsText",
+          text: "Sim",
+          priority: 1,
+          style: {
+            fill: solid("FFD1FAE5"),
+            font: { color: { argb: "FF065F46" }, bold: true },
+          },
+        },
+        {
+          type: "containsText",
+          operator: "containsText",
+          text: "Obrigat",
+          priority: 2,
+          style: {
+            fill: solid("FFD1FAE5"),
+            font: { color: { argb: "FF065F46" }, bold: true },
+          },
+        },
+        {
+          type: "containsText",
+          operator: "containsText",
+          text: "Não",
+          priority: 3,
+          style: {
+            fill: solid("FFFEE2E2"),
+            font: { color: { argb: "FF991B1B" }, bold: true },
+          },
+        },
+      ],
+    });
+  }
+
   const buffer = await wb.xlsx.writeBuffer();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -393,6 +570,17 @@ function formatStampSP(iso: string | null): string {
   } catch {
     return "—";
   }
+}
+
+// Nº da coluna -> letra ("A", "B", ... "AA"), p/ montar referências de fórmula.
+function colLetter(n: number): string {
+  let s = "";
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }
 
 // ----------------------- helpers de estilo -----------------------
