@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { getAccess, isOptOutSquadron } from "@/lib/constants";
-import { todaySaoPaulo } from "@/lib/dates";
+import { todaySaoPaulo, effectiveLocked } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -64,10 +64,10 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "slot_id obrigatório" }, { status: 400 });
   }
 
-  // Validação server-side: slot existe, não está locked, pertence ao esquadrão.
+  // Validação server-side: slot existe, não está bloqueado, pertence ao esquadrão.
   const { data: slot, error: slotErr } = await supabaseAdmin
     .from("meal_slots")
-    .select("id, date, squadrons, locked")
+    .select("id, date, squadrons, lock_override")
     .eq("id", slotId)
     .maybeSingle();
 
@@ -77,9 +77,11 @@ export async function PUT(req: Request) {
   if (!slot) {
     return NextResponse.json({ error: "Refeição não encontrada" }, { status: 404 });
   }
-  if (slot.locked) {
+  // Bloqueio combinado: manual do admin OU automático de 4 dias (o desbloqueio
+  // manual do admin vence e libera). Ver effectiveLocked em @/lib/dates.
+  if (effectiveLocked(slot.lock_override, slot.date)) {
     return NextResponse.json(
-      { error: "Refeição bloqueada — não é possível alterar" },
+      { error: "Esta refeição já está bloqueada para marcação" },
       { status: 409 }
     );
   }

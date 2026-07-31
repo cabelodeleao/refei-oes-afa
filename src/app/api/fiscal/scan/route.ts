@@ -86,7 +86,7 @@ export async function POST(req: Request) {
   // 2) Slot.
   const { data: slot, error: slotErr } = await supabaseAdmin
     .from("meal_slots")
-    .select("id, squadrons, locked")
+    .select("id, squadrons")
     .eq("id", slotId)
     .maybeSingle();
 

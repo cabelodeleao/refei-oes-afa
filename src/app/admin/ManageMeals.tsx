@@ -20,6 +20,7 @@ import {
   formatShortDate,
   weekdayShort,
   parseISODate,
+  type LockOverride,
 } from "@/lib/dates";
 import { apiFetch } from "@/lib/client";
 import { useToast } from "@/components/Toast";
@@ -29,8 +30,33 @@ interface Slot {
   date: string;
   meal_type: MealType;
   squadrons: SquadronAccess;
-  locked: boolean;
+  // Intenção manual do admin (null = automático) + situação do prazo de 4 dias.
+  lock_override: LockOverride;
+  auto_locked: boolean; // o prazo automático (4 dias antes, 23:59) já passou?
+  auto_lock_date: string; // data ISO em que o automático bloqueia (23:59)
+  locked: boolean; // efetivo (manual + automático)
 }
+
+// Situação de bloqueio de uma refeição, para escolher ícone/estilo/rótulo.
+//   "manual"    -> admin travou (lock_override = "bloqueado")
+//   "exception" -> admin liberou exceção (lock_override = "desbloqueado")
+//   "auto"      -> automático já bloqueou (prazo de 4 dias passou)
+//   "open"      -> liberada, dentro do prazo
+type LockKind = "manual" | "exception" | "auto" | "open";
+
+function lockKind(slot: Slot): LockKind {
+  if (slot.lock_override === "bloqueado") return "manual";
+  if (slot.lock_override === "desbloqueado") return "exception";
+  return slot.auto_locked ? "auto" : "open";
+}
+
+// Ícone + rótulo de cada situação (texto por extenso; a cor só reforça).
+const LOCK_BADGE: Record<LockKind, { icon: string; title: string }> = {
+  manual: { icon: "🔒", title: "Bloqueada manualmente" },
+  exception: { icon: "🔓", title: "Desbloqueada manualmente (exceção)" },
+  auto: { icon: "🔒", title: "Bloqueada automaticamente (prazo de 4 dias)" },
+  open: { icon: "", title: "Aberta para marcação" },
+};
 
 // Mapa completo de acesso (sempre os 4 esquadrões), default "ninguem".
 type AccessMap = Record<number, AccessState>;
@@ -151,15 +177,21 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     });
   }
 
-  async function bulkLock(locked: boolean) {
+  async function bulkOverride(override: LockOverride) {
     if (selected.size === 0) return;
     const res = await apiFetch("/api/slots/lock", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slot_ids: [...selected], locked }),
+      body: JSON.stringify({ slot_ids: [...selected], override }),
     });
     if (res.ok) {
-      toast.success(locked ? "Refeições bloqueadas!" : "Refeições desbloqueadas!");
+      toast.success(
+        override === "bloqueado"
+          ? "Refeições bloqueadas!"
+          : override === "desbloqueado"
+          ? "Refeições desbloqueadas!"
+          : "Refeições voltaram ao bloqueio automático!"
+      );
       setSelected(new Set());
       load();
     } else toast.error("Erro ao atualizar bloqueio.");
@@ -290,16 +322,26 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
             <button
               className="btn-secondary px-2.5 py-1.5 text-xs"
               disabled={selected.size === 0}
-              onClick={() => bulkLock(true)}
+              onClick={() => bulkOverride("bloqueado")}
+              title="Travar manualmente (independe da data)"
             >
               🔒 Bloquear
             </button>
             <button
               className="btn-secondary px-2.5 py-1.5 text-xs"
               disabled={selected.size === 0}
-              onClick={() => bulkLock(false)}
+              onClick={() => bulkOverride("desbloqueado")}
+              title="Abrir exceção: liberar mesmo após o prazo automático"
             >
               🔓 Desbloquear
+            </button>
+            <button
+              className="btn-secondary px-2.5 py-1.5 text-xs"
+              disabled={selected.size === 0}
+              onClick={() => bulkOverride(null)}
+              title="Voltar à regra automática (bloqueia 4 dias antes, 23:59)"
+            >
+              ⏱ Automático
             </button>
             <button
               className="btn-ghost px-2.5 py-1.5 text-xs text-red-600"
@@ -533,6 +575,55 @@ const CELL_MIN_H_MOBILE = "min-h-[64px]";
 const CELL_MIN_W_MOBILE = "min-w-[88px]";
 const CELL_MIN_H_DESKTOP = "min-h-[152px]";
 
+// Indicador de bloqueio de uma refeição (canto da célula). Feedback redundante:
+// ícone + cor + (no desktto) texto por extenso.
+//   Aberta          -> ● verde  (showHint: "bloqueia seg 23:59")
+//   Automático fech. -> 🔒 + "auto"
+//   Bloqueio manual  -> 🔒
+//   Exceção liberada -> 🔓 destacado (âmbar) + "exceção"
+function LockIndicator({ slot, showHint }: { slot: Slot; showHint?: boolean }) {
+  const kind = lockKind(slot);
+  if (kind === "open") {
+    return showHint ? (
+      <span
+        className="whitespace-nowrap text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
+        title={`Aberta — bloqueia automaticamente ${weekdayShort(
+          slot.auto_lock_date
+        )} 23:59`}
+      >
+        bloqueia {weekdayShort(slot.auto_lock_date)} 23:59
+      </span>
+    ) : (
+      <span title="Aberta para marcação" className="text-xs text-emerald-500">
+        ●
+      </span>
+    );
+  }
+  const badge = LOCK_BADGE[kind];
+  const cls =
+    kind === "exception"
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-slate-500 dark:text-gray-300";
+  return (
+    <span
+      className={`flex items-center gap-0.5 text-sm font-semibold ${cls}`}
+      title={badge.title}
+    >
+      <span aria-hidden>{badge.icon}</span>
+      {kind === "auto" && (
+        <span className="text-[9px] font-bold uppercase tracking-wide opacity-80">
+          auto
+        </span>
+      )}
+      {kind === "exception" && showHint && (
+        <span className="text-[9px] font-bold uppercase tracking-wide opacity-80">
+          exceção
+        </span>
+      )}
+    </span>
+  );
+}
+
 function GridCell({
   slot,
   checked,
@@ -571,15 +662,7 @@ function GridCell({
           className="h-3.5 w-3.5 accent-navy-600"
           title="Selecionar"
         />
-        {slot.locked ? (
-          <span className="text-xs" title="Bloqueado">
-            🔒
-          </span>
-        ) : (
-          <span title="Aberto" className="text-xs text-emerald-500">
-            ●
-          </span>
-        )}
+        <LockIndicator slot={slot} />
       </div>
       <button
         onClick={onClick}
@@ -692,19 +775,15 @@ function DesktopCell({
           : "border-slate-200 bg-white dark:border-gray-600 dark:bg-gray-700/60"
       }`}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-1">
         <input
           type="checkbox"
           checked={checked}
           onChange={onToggleSelect}
-          className="h-4 w-4 accent-navy-600"
+          className="h-4 w-4 shrink-0 accent-navy-600"
           title="Selecionar"
         />
-        {slot.locked && (
-          <span className="text-sm" title="Bloqueado">
-            🔒
-          </span>
-        )}
+        <LockIndicator slot={slot} showHint />
       </div>
       <button
         onClick={onClick}

@@ -71,3 +71,67 @@ export function todaySaoPaulo(): string {
     timeZone: "America/Sao_Paulo",
   }).format(new Date());
 }
+
+// Momento atual no relógio de parede de Brasília, como "YYYY-MM-DDTHH:mm:ss".
+// Comparável lexicograficamente com outros carimbos no mesmo formato e fuso —
+// evita ter que lidar com offset de fuso na aritmética de bloqueio automático.
+export function nowSaoPauloStamp(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const p: Record<string, string> = {};
+  for (const x of parts) p[x.type] = x.value;
+  // Alguns runtimes formatam a meia-noite como "24" — normaliza para "00".
+  const hour = p.hour === "24" ? "00" : p.hour;
+  return `${p.year}-${p.month}-${p.day}T${hour}:${p.minute}:${p.second}`;
+}
+
+// Bloqueio automático: uma refeição fecha 4 dias antes da sua data, às 23:59
+// (horário de Brasília). Ex.: refeição de sexta -> fecha na segunda 23:59.
+// Retorna o carimbo "YYYY-MM-DDT23:59:00" desse instante.
+export function autoLockStamp(mealDateISO: string): string {
+  const d = addDays(parseISODate(mealDateISO), -4);
+  return `${toISODate(d)}T23:59:00`;
+}
+
+// Data ISO ("YYYY-MM-DD") em que o bloqueio automático da refeição entra em
+// vigor (o horário é sempre 23:59). Útil para exibir "bloqueia seg 23:59".
+export function autoLockDate(mealDateISO: string): string {
+  return toISODate(addDays(parseISODate(mealDateISO), -4));
+}
+
+// A refeição já passou do prazo de bloqueio automático?
+export function isAutoLocked(
+  mealDateISO: string,
+  nowStamp: string = nowSaoPauloStamp()
+): boolean {
+  return nowStamp >= autoLockStamp(mealDateISO);
+}
+
+// Intenção manual do admin sobre o bloqueio de uma refeição:
+//   null / undefined -> segue a regra automática (4 dias antes, 23:59)
+//   "bloqueado"      -> admin travou manualmente (independe da data)
+//   "desbloqueado"   -> admin abriu exceção: liberado mesmo que o automático
+//                       já bloquearia (o desbloqueio manual VENCE tudo)
+export type LockOverride = "bloqueado" | "desbloqueado" | null;
+
+// Regra final combinada: a refeição está bloqueada para marcação?
+//   desbloqueado -> nunca (exceção do admin vence)
+//   bloqueado    -> sempre
+//   automático   -> só depois do prazo de 4 dias
+export function effectiveLocked(
+  lockOverride: LockOverride | string | null | undefined,
+  mealDateISO: string,
+  nowStamp: string = nowSaoPauloStamp()
+): boolean {
+  if (lockOverride === "desbloqueado") return false;
+  if (lockOverride === "bloqueado") return true;
+  return isAutoLocked(mealDateISO, nowStamp);
+}

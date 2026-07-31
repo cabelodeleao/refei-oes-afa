@@ -22,7 +22,6 @@ interface SlotRow {
   date: string;
   meal_type: MealType;
   squadrons: SquadronAccess;
-  locked: boolean;
 }
 interface CadetRow {
   id: string;
@@ -53,7 +52,7 @@ export async function GET(req: Request) {
     // --- Slots no período (paginado), ordenados por data e tipo de refeição ---
     slots = await selectAll<SlotRow>(
       "meal_slots",
-      "id, date, meal_type, squadrons, locked",
+      "id, date, meal_type, squadrons",
       (q) => {
         if (from) q = q.gte("date", from);
         if (to) q = q.lte("date", to);

@@ -10,7 +10,17 @@ import {
   type AccessState,
   type SquadronAccess,
 } from "@/lib/constants";
-import { todaySaoPaulo, parseISODate, addDays, toISODate } from "@/lib/dates";
+import {
+  todaySaoPaulo,
+  parseISODate,
+  addDays,
+  toISODate,
+  nowSaoPauloStamp,
+  isAutoLocked,
+  effectiveLocked,
+  autoLockDate,
+  type LockOverride,
+} from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -19,7 +29,7 @@ interface SlotRow {
   date: string;
   meal_type: MealType;
   squadrons: SquadronAccess;
-  locked: boolean;
+  lock_override: LockOverride;
 }
 
 // GET /api/slots?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -51,7 +61,7 @@ export async function GET(req: Request) {
   try {
     slots = await selectAll<SlotRow>(
       "meal_slots",
-      "id, date, meal_type, squadrons, locked",
+      "id, date, meal_type, squadrons, lock_override",
       (q) => {
         if (from) q = q.gte("date", from);
         if (to) q = q.lte("date", to);
@@ -68,9 +78,24 @@ export async function GET(req: Request) {
   }
   slots.sort((a, b) => a.date.localeCompare(b.date));
 
-  // Admin vê todos os slots, sem filtro de esquadrão.
+  const now = nowSaoPauloStamp();
+
+  // Admin vê todos os slots, sem filtro de esquadrão. Recebe o estado manual
+  // (lock_override) e os dados do bloqueio automático para exibir o ícone certo
+  // e "bloqueia <dia> 23:59". `locked` é o efetivo (manual + automático).
   if (session.is_admin) {
-    return NextResponse.json({ slots });
+    return NextResponse.json({
+      slots: slots.map((s) => ({
+        id: s.id,
+        date: s.date,
+        meal_type: s.meal_type,
+        squadrons: s.squadrons,
+        lock_override: s.lock_override ?? null,
+        auto_locked: isAutoLocked(s.date, now),
+        auto_lock_date: autoLockDate(s.date),
+        locked: effectiveLocked(s.lock_override, s.date, now),
+      })),
+    });
   }
 
   // Cadete: vê slots em que seu esquadrão é "opcional" ou "todos".
@@ -119,9 +144,13 @@ export async function GET(req: Request) {
         id: s.id,
         date: s.date,
         meal_type: s.meal_type,
-        // Histórico é somente consulta: tudo com cadeado. O servidor também
-        // rejeita alterações em dias passados (ver PUT /api/marks).
-        locked: s.locked || history || s.date < today,
+        // Bloqueio efetivo (manual do admin OU automático de 4 dias). Histórico
+        // é somente consulta e dias passados nunca são editáveis — o servidor
+        // também rejeita essas alterações no PUT /api/marks.
+        locked:
+          effectiveLocked(s.lock_override, s.date, now) ||
+          history ||
+          s.date < today,
         access: s.access, // "opcional" | "todos"
         marked,
       };
@@ -177,11 +206,12 @@ export async function POST(req: Request) {
     rows.push({ date: s.date, meal_type: s.meal_type, squadrons });
   }
 
-  // Upsert por (date, meal_type): mantém `locked` existente, atualiza squadrons.
+  // Upsert por (date, meal_type): mantém `lock_override` existente (não está
+  // no payload), atualiza squadrons.
   const { data, error } = await supabaseAdmin
     .from("meal_slots")
     .upsert(rows, { onConflict: "date,meal_type" })
-    .select("id, date, meal_type, squadrons, locked");
+    .select("id, date, meal_type, squadrons, lock_override");
 
   if (error) {
     return NextResponse.json(

@@ -8,6 +8,11 @@ import {
   type MealType,
   type SquadronAccess,
 } from "@/lib/constants";
+import {
+  effectiveLocked,
+  nowSaoPauloStamp,
+  type LockOverride,
+} from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -16,7 +21,7 @@ interface SlotRow {
   date: string;
   meal_type: MealType;
   squadrons: SquadronAccess;
-  locked: boolean;
+  lock_override: LockOverride;
 }
 
 // GET /api/marks/summary?from=YYYY-MM-DD&to=YYYY-MM-DD  (admin)
@@ -36,7 +41,7 @@ export async function GET(req: Request) {
     // Paginado: o intervalo pode ter > 1000 slots.
     slotList = await selectAll<SlotRow>(
       "meal_slots",
-      "id, date, meal_type, squadrons, locked",
+      "id, date, meal_type, squadrons, lock_override",
       (q) => {
         if (from) q = q.gte("date", from);
         if (to) q = q.lte("date", to);
@@ -99,6 +104,7 @@ export async function GET(req: Request) {
     target.set(key, (target.get(key) ?? 0) + 1);
   }
 
+  const now = nowSaoPauloStamp();
   const result = slotList.map((slot) => {
     const counts: Record<number, number> = {};
     const access: Record<number, string> = {};
@@ -136,7 +142,7 @@ export async function GET(req: Request) {
       meal_type: slot.meal_type,
       squadrons: slot.squadrons,
       access, // estado por esquadrão: opcional | todos | ninguem
-      locked: slot.locked,
+      locked: effectiveLocked(slot.lock_override, slot.date, now),
       counts, // nº a exibir por esquadrão (opcional=opt-in; todos=efetivo - opt-outs)
       total,
     };

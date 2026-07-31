@@ -35,7 +35,12 @@ create table if not exists public.meal_slots (
   meal_type  text not null check (meal_type in ('cafe', 'almoco', 'janta', 'ceia')),
   squadrons  jsonb not null default
     '{"1":"opcional","2":"opcional","3":"opcional","4":"opcional"}'::jsonb,
-  locked     boolean default false,
+  -- Intenção manual do admin sobre o bloqueio (o bloqueio automático de 4 dias
+  -- antes é calculado em tempo real no servidor, não fica no banco):
+  --   null           -> segue o automático (bloqueia 4 dias antes, 23:59 BRT)
+  --   'bloqueado'    -> admin travou manualmente (independe da data)
+  --   'desbloqueado' -> admin abriu exceção: liberado mesmo após o prazo
+  lock_override text check (lock_override in ('bloqueado', 'desbloqueado')),
   created_at timestamptz default now(),
   unique (date, meal_type)
 );
@@ -111,7 +116,6 @@ create table if not exists public.menu_photos (
 -- Índices
 -- --------------------------------------------------------------------------
 create index if not exists idx_meal_slots_date   on public.meal_slots (date);
-create index if not exists idx_meal_slots_locked on public.meal_slots (locked);
 create index if not exists idx_meal_marks_slot   on public.meal_marks (slot_id);
 create index if not exists idx_meal_marks_cadet  on public.meal_marks (cadet_id);
 create index if not exists idx_meal_entries_slot  on public.meal_entries (slot_id);
