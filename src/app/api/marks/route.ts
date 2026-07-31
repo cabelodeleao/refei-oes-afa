@@ -178,7 +178,12 @@ export async function PUT(req: Request) {
       { onConflict: "cadet_id,slot_id" }
     );
     if (error) {
-      return NextResponse.json({ error: "Erro ao salvar" }, { status: 500 });
+      // Inclui o motivo do banco: se as colunas late_reason/late_note ainda não
+      // existirem (migração não aplicada), o erro fica explícito aqui.
+      return NextResponse.json(
+        { error: "Erro ao salvar: " + error.message },
+        { status: 500 }
+      );
     }
     return NextResponse.json({ ok: true, slot_id: slotId, marked, late: true });
   }
