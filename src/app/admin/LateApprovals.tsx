@@ -38,6 +38,9 @@ interface LateSlot {
 interface Props {
   from: string;
   to: string;
+  // Chamado após uma aprovação, para o Resumo recalcular o quantitativo (que
+  // passa a incluir as marcações recém-aprovadas).
+  onApproved?: () => void;
 }
 
 // Horário da marcação no fuso de Brasília: "dd/mm HH:mm".
@@ -56,7 +59,7 @@ function formatStamp(iso: string | null): string {
   }
 }
 
-export default function LateApprovals({ from, to }: Props) {
+export default function LateApprovals({ from, to, onApproved }: Props) {
   const toast = useToast();
   const [slots, setSlots] = useState<LateSlot[]>([]);
   const [totals, setTotals] = useState({ pending: 0, approved: 0 });
@@ -101,6 +104,7 @@ export default function LateApprovals({ from, to }: Props) {
           `${data.approved ?? 0} marcação(ões) de última hora aprovada(s)!`
         );
         load();
+        onApproved?.();
       } else {
         toast.error(data.error ?? "Erro ao aprovar.");
       }
@@ -142,8 +146,9 @@ export default function LateApprovals({ from, to }: Props) {
             className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40"
             disabled={busy || pendingSlotIds.length === 0}
             onClick={() => approve(pendingSlotIds)}
+            title="Aprovar todas as pendentes de todas as refeições do período"
           >
-            ✓ Aprovar todas
+            ✓ Aprovar todas (todas as refeições)
           </button>
         </div>
       </div>
@@ -199,8 +204,9 @@ export default function LateApprovals({ from, to }: Props) {
                         className="btn-secondary px-2.5 py-1 text-xs disabled:opacity-40"
                         disabled={busy}
                         onClick={() => approve([s.slot_id])}
+                        title="Aprovar todas as pendentes desta refeição"
                       >
-                        Aprovar
+                        ✓ Aprovar todas desta refeição
                       </button>
                     )}
                   </div>

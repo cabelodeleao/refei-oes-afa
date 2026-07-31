@@ -118,7 +118,7 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
         </div>
       </section>
 
-      <LateApprovals from={from} to={to} />
+      <LateApprovals from={from} to={to} onApproved={load} />
 
       <section className="card overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-4 dark:border-gray-700">
@@ -126,7 +126,8 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
             Resumo de marcações
           </h2>
           <p className="text-xs text-slate-500 dark:text-gray-400">
-            Clique em um número para ver os cadetes que marcaram “Sim”.
+            Clique em um número para ver os cadetes que marcaram “Sim”. As
+            marcações de última hora só entram na conta depois de aprovadas.
           </p>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-gray-400">
             <span className="inline-flex items-center gap-1.5">

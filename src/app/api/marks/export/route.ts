@@ -136,6 +136,7 @@ export async function GET(req: Request) {
   const optOutSet = new Set<string>(); // "cadetId|slotId" attending=false ("Não")
   const optInCount = new Map<string, number>(); // "slotId|sq" -> nº opt-in
   const optOutCount = new Map<string, number>(); // "slotId|sq" -> nº opt-out
+  const pendingLateCount = new Map<string, number>(); // "slotId|sq" -> última hora pendente
   // Marcações de última hora (segunda chance): "cadetId|slotId" -> aprovada?
   const lateInfo = new Map<string, boolean>();
   for (const m of marksData) {
@@ -150,6 +151,10 @@ export async function GET(req: Request) {
       if (sq) optOutCount.set(ckey, (optOutCount.get(ckey) ?? 0) + 1);
     }
     if (m.late_marking) lateInfo.set(key, m.late_approved);
+    // Última hora ainda pendente: não conta no total (só após aprovada).
+    if (m.attending && m.late_marking && !m.late_approved && sq) {
+      pendingLateCount.set(ckey, (pendingLateCount.get(ckey) ?? 0) + 1);
+    }
   }
 
   // Lista de marcações de última hora (para a aba dedicada), ordenada.
@@ -180,14 +185,17 @@ export async function GET(req: Request) {
       return a.cadet!.number.localeCompare(b.cadet!.number);
     });
 
-  // Nº de cadetes que comem em (slot, esquadrão), conforme o modo.
+  // Nº de cadetes que comem em (slot, esquadrão), conforme o modo. As marcações
+  // de última hora ainda pendentes NÃO entram (só contam depois de aprovadas).
   const eatNumber = (s: SlotRow, sq: number): number => {
     const state = getAccess(s.squadrons, sq);
-    if (state === "opcional") return optInCount.get(`${s.id}|${sq}`) ?? 0;
+    const pending = pendingLateCount.get(`${s.id}|${sq}`) ?? 0;
+    if (state === "opcional")
+      return (optInCount.get(`${s.id}|${sq}`) ?? 0) - pending;
     if (state === "todos") {
       const roster = bySquadron.get(sq)!.length;
       return isOptOutSquadron(sq)
-        ? roster - (optOutCount.get(`${s.id}|${sq}`) ?? 0)
+        ? roster - (optOutCount.get(`${s.id}|${sq}`) ?? 0) - pending
         : roster;
     }
     return 0; // ninguem

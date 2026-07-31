@@ -38,6 +38,9 @@ export async function GET(req: Request) {
           .eq("slot_id", slotId)
           .eq("attending", true) // opt-ins = quem marcou "Sim"
           .eq("cadets.squadron", squadron)
+          // Exclui as de última hora ainda pendentes (só entram após aprovadas),
+          // para bater com o quantitativo do Resumo.
+          .or("late_marking.eq.false,late_approved.eq.true")
     );
 
     const cadets = marks

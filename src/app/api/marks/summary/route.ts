@@ -77,12 +77,14 @@ export async function GET(req: Request) {
   let marks: Array<{
     slot_id: string;
     attending: boolean;
+    late_marking: boolean;
+    late_approved: boolean;
     cadets: { squadron: number };
   }>;
   try {
     marks = await selectAll(
       "meal_marks",
-      "id, slot_id, attending, cadets!inner(squadron), meal_slots!inner(date)",
+      "id, slot_id, attending, late_marking, late_approved, cadets!inner(squadron), meal_slots!inner(date)",
       (q) => {
         if (from) q = q.gte("meal_slots.date", from);
         if (to) q = q.lte("meal_slots.date", to);
@@ -94,14 +96,21 @@ export async function GET(req: Request) {
   }
 
   // Por slot/esquadrão: opt-ins (attending=true) e opt-outs (attending=false).
+  // Marcações de última hora PENDENTES (não aprovadas) NÃO entram no quantitativo
+  // — só contam depois que o admin aprova. `pendingLate` guarda quantas há por
+  // slot/esquadrão para descontá-las das duas fórmulas de contagem abaixo.
   const optIn = new Map<string, number>(); // "slotId|sq" -> nº de "Sim" (opcional)
   const optOut = new Map<string, number>(); // "slotId|sq" -> nº de "Não" (opt-out)
+  const pendingLate = new Map<string, number>(); // "slotId|sq" -> nº última hora pendente
   for (const m of marks) {
     const squadron = m.cadets?.squadron;
     if (!squadron) continue;
     const key = `${m.slot_id}|${squadron}`;
     const target = m.attending ? optIn : optOut;
     target.set(key, (target.get(key) ?? 0) + 1);
+    if (m.attending && m.late_marking && !m.late_approved) {
+      pendingLate.set(key, (pendingLate.get(key) ?? 0) + 1);
+    }
   }
 
   const now = nowSaoPauloStamp();
@@ -116,14 +125,18 @@ export async function GET(req: Request) {
       const key = `${slot.id}|${sq}`;
 
       if (state === "opcional") {
-        // Quem marcou voluntariamente (opt-in).
-        const n = optIn.get(key) ?? 0;
+        // Quem marcou voluntariamente (opt-in), menos as de última hora pendentes.
+        const n = (optIn.get(key) ?? 0) - (pendingLate.get(key) ?? 0);
         counts[sq] = n;
         total += n;
       } else if (state === "todos") {
         if (isOptOutSquadron(sq)) {
-          // 3º/4º: todos comem menos quem desmarcou (opt-out).
-          const n = (squadronTotals[sq] ?? 0) - (optOut.get(key) ?? 0);
+          // 3º/4º: todos comem menos quem desmarcou (opt-out) e menos as de
+          // última hora ainda pendentes (elas voltaram como attending=true).
+          const n =
+            (squadronTotals[sq] ?? 0) -
+            (optOut.get(key) ?? 0) -
+            (pendingLate.get(key) ?? 0);
           counts[sq] = n;
           total += n;
         } else {
