@@ -41,16 +41,18 @@ async function logAttempt(
 }
 
 // POST /api/fiscal/scan  (fiscal/admin)
-// Body: { qr_token, slot_id }
-// Valida o direito do cadete àquela refeição e, se autorizado, registra a
-// entrada em meal_entries (uma única vez por cadete/slot).
+// Body: { qr_token?, number?, slot_id }
+// Identifica o cadete pelo QR (qr_token) OU pelo número digitado (number,
+// "leitura sem QR"), valida o direito àquela refeição e, se autorizado, registra
+// a entrada em meal_entries (uma única vez por cadete/slot). O número é aceito
+// com ou sem barra ("25/217" ou "25217"), igual ao login.
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session || !(session.is_fiscal || session.is_admin)) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
-  let body: { qr_token?: string; slot_id?: string };
+  let body: { qr_token?: string; number?: string; slot_id?: string };
   try {
     body = await req.json();
   } catch {
@@ -58,29 +60,70 @@ export async function POST(req: Request) {
   }
 
   const qrToken = body.qr_token?.trim();
+  const numberInput = body.number?.trim();
   const slotId = body.slot_id;
-  if (!qrToken || !slotId) {
+  if (!slotId || (!qrToken && !numberInput)) {
     return NextResponse.json(
-      { error: "qr_token e slot_id são obrigatórios" },
+      { error: "Informe o QR (qr_token) ou o número (number), e o slot_id" },
       { status: 400 }
     );
   }
 
-  // 1) Cadete pelo token do QR.
-  const { data: cadet, error: cadetErr } = await supabaseAdmin
-    .from("cadets")
-    .select("id, number, name, squadron")
-    .eq("qr_token", qrToken)
-    .maybeSingle();
+  // 1) Identifica o cadete: por QR (token) ou por número digitado.
+  let cadet: {
+    id: string;
+    number: string;
+    name: string;
+    squadron: number;
+  } | null = null;
+  const cols = "id, number, name, squadron";
 
-  if (cadetErr) {
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
-  }
-  if (!cadet) {
-    return NextResponse.json({
-      status: "invalido" as ScanStatus,
-      reason: "QR inválido ou não reconhecido",
-    });
+  if (qrToken) {
+    const { data, error: cadetErr } = await supabaseAdmin
+      .from("cadets")
+      .select(cols)
+      .eq("qr_token", qrToken)
+      .maybeSingle();
+    if (cadetErr) {
+      return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    }
+    cadet = data;
+    if (!cadet) {
+      return NextResponse.json({
+        status: "invalido" as ScanStatus,
+        reason: "QR inválido ou não reconhecido",
+      });
+    }
+  } else {
+    // Por número: tenta como digitado e, se só dígitos, no formato com barra.
+    const num = numberInput as string;
+    const { data, error: cadetErr } = await supabaseAdmin
+      .from("cadets")
+      .select(cols)
+      .eq("number", num)
+      .maybeSingle();
+    if (cadetErr) {
+      return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    }
+    cadet = data;
+    if (!cadet && /^\d{3,}$/.test(num)) {
+      const withSlash = `${num.slice(0, 2)}/${num.slice(2)}`;
+      const retry = await supabaseAdmin
+        .from("cadets")
+        .select(cols)
+        .eq("number", withSlash)
+        .maybeSingle();
+      if (retry.error) {
+        return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+      }
+      cadet = retry.data;
+    }
+    if (!cadet) {
+      return NextResponse.json({
+        status: "invalido" as ScanStatus,
+        reason: "Número não encontrado",
+      });
+    }
   }
 
   // 2) Slot.

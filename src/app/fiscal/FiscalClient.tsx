@@ -111,6 +111,13 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
   const [count, setCount] = useState(0);
   const [recent, setRecent] = useState<RecentItem[]>([]);
 
+  // Modo de leitura: câmera (QR) ou digitação do número (sem QR).
+  const [mode, setMode] = useState<"qr" | "manual">("qr");
+  const [manualNumber, setManualNumber] = useState("");
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState("");
+  const manualInputRef = useRef<HTMLInputElement>(null);
+
   // Lista de cadetes para o autocomplete (anotações da fiscalização).
   const [cadets, setCadets] = useState<Cadet[]>([]);
 
@@ -238,6 +245,41 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
     };
   }, [stopScanner]);
 
+  // Aplica o resultado de uma leitura (QR ou número): destaque, som, contador,
+  // lista de recentes e, se for duplicado, o painel de anotação de fraude.
+  function applyScanData(data: ScanResult) {
+    setResult(data);
+    if (data.status === "autorizado") {
+      beep("ok");
+      setCount((c) => c + 1);
+    } else if (data.status === "ja_registrado") {
+      beep("warn");
+      if (data.attempt_id && data.cadet) {
+        setFlagTarget({
+          attemptId: data.attempt_id,
+          ownerName: data.cadet.name,
+          ownerNumber: data.cadet.number,
+        });
+        setFlagPerson("");
+        setFlagNote("");
+        setFlagDone(false);
+        setFlagError("");
+      }
+    } else {
+      beep("err");
+    }
+    if (data.cadet) {
+      const item: RecentItem = {
+        key: ++seqRef.current,
+        status: data.status,
+        name: data.cadet.name,
+        number: data.cadet.number,
+        time: hhmm(data.entered_at) || hhmm(new Date().toISOString()),
+      };
+      setRecent((r) => [item, ...r].slice(0, 20));
+    }
+  }
+
   async function processScan(token: string) {
     const currentSlot = slotIdRef.current;
     if (!currentSlot) return;
@@ -252,37 +294,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
         setResult({ status: "invalido", reason: "Erro na leitura" });
         beep("err");
       } else {
-        setResult(data);
-        if (data.status === "autorizado") {
-          beep("ok");
-          setCount((c) => c + 1);
-        } else if (data.status === "ja_registrado") {
-          beep("warn");
-          // Abre o painel p/ anotar quem está usando o QR alheio (fraude).
-          if (data.attempt_id && data.cadet) {
-            setFlagTarget({
-              attemptId: data.attempt_id,
-              ownerName: data.cadet.name,
-              ownerNumber: data.cadet.number,
-            });
-            setFlagPerson("");
-            setFlagNote("");
-            setFlagDone(false);
-            setFlagError("");
-          }
-        } else {
-          beep("err");
-        }
-        if (data.cadet) {
-          const item: RecentItem = {
-            key: ++seqRef.current,
-            status: data.status,
-            name: data.cadet.name,
-            number: data.cadet.number,
-            time: hhmm(data.entered_at) || hhmm(new Date().toISOString()),
-          };
-          setRecent((r) => [item, ...r].slice(0, 20));
-        }
+        applyScanData(data);
       }
     } catch {
       setResult({ status: "invalido", reason: "Erro de conexão" });
@@ -300,6 +312,55 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
         /* ignore */
       }
     }, RESULT_MS);
+  }
+
+  // Leitura SEM QR: registra a entrada pelo número que a pessoa fala. Roda a
+  // mesma validação/registro do QR (autoriza + grava em meal_entries + conta).
+  async function submitManual() {
+    if (!slotId) {
+      setManualError("Selecione a refeição antes.");
+      return;
+    }
+    const num = manualNumber.trim();
+    if (!num) {
+      setManualError("Digite o número do cadete.");
+      return;
+    }
+    setManualBusy(true);
+    setManualError("");
+    try {
+      const res = await apiFetch("/api/fiscal/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number: num, slot_id: slotId }),
+      });
+      const data: ScanResult = await res.json();
+      if (!res.ok || !data.status) {
+        setResult({ status: "invalido", reason: data?.reason ?? "Erro na leitura" });
+        beep("err");
+      } else {
+        applyScanData(data);
+      }
+      setManualNumber("");
+      manualInputRef.current?.focus();
+    } catch {
+      setResult({ status: "invalido", reason: "Erro de conexão" });
+      beep("err");
+    } finally {
+      setManualBusy(false);
+    }
+    // Limpa o destaque depois de alguns segundos.
+    clearTimeout(resultTimer.current);
+    resultTimer.current = setTimeout(() => setResult(null), RESULT_MS);
+  }
+
+  // Troca o modo de leitura; para a câmera se estiver ligada.
+  async function switchMode(m: "qr" | "manual") {
+    if (m === mode) return;
+    if (scanning) await stopScanning();
+    setResult(null);
+    setManualError("");
+    setMode(m);
   }
 
   async function startScanner() {
@@ -434,7 +495,111 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
           )}
         </section>
 
+        {/* Alternador de modo: câmera (QR) x digitar o número (sem QR) */}
+        <div className="card flex gap-2 p-2">
+          <button
+            type="button"
+            onClick={() => switchMode("qr")}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+              mode === "qr"
+                ? "bg-navy-700 text-white shadow"
+                : "text-slate-600 hover:bg-slate-100 dark:text-gray-300 dark:hover:bg-gray-700"
+            }`}
+          >
+            📷 Ler QR Code
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("manual")}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+              mode === "manual"
+                ? "bg-navy-700 text-white shadow"
+                : "text-slate-600 hover:bg-slate-100 dark:text-gray-300 dark:hover:bg-gray-700"
+            }`}
+          >
+            ⌨️ Leitura sem QR Code
+          </button>
+        </div>
+
+        {/* Leitura sem QR: digitar o número que o cadete falar */}
+        {mode === "manual" && (
+          <section className="card space-y-3 p-5">
+            <label className="block text-sm font-semibold text-navy-800 dark:text-gray-100">
+              Número do cadete
+            </label>
+            <div className="flex gap-2">
+              <input
+                ref={manualInputRef}
+                className="input flex-1"
+                inputMode="numeric"
+                placeholder="Ex.: 25217 ou 25/217"
+                value={manualNumber}
+                onChange={(e) => setManualNumber(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void submitManual();
+                  }
+                }}
+                disabled={!slotId || manualBusy}
+                autoFocus
+              />
+              <button
+                className="btn-primary px-5"
+                onClick={submitManual}
+                disabled={!slotId || manualBusy}
+              >
+                {manualBusy ? "…" : "Registrar"}
+              </button>
+            </div>
+            {!slotId && (
+              <p className="text-xs text-slate-400">
+                Selecione a refeição acima para começar.
+              </p>
+            )}
+            {manualError && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {manualError}
+              </p>
+            )}
+
+            {/* Resultado da última leitura por número */}
+            {result && (
+              <div
+                className={`flex items-center gap-3 rounded-xl p-4 text-white ${
+                  STATUS_UI[result.status].bg
+                }`}
+              >
+                <span className="text-4xl font-black leading-none">
+                  {STATUS_UI[result.status].icon}
+                </span>
+                <div className="min-w-0">
+                  {result.cadet && (
+                    <>
+                      <p className="truncate text-lg font-extrabold leading-tight">
+                        {result.cadet.name}
+                      </p>
+                      <p className="text-sm opacity-90">
+                        {result.cadet.number} · {result.cadet.squadron_label}
+                      </p>
+                    </>
+                  )}
+                  <p className="mt-0.5 text-sm font-extrabold uppercase tracking-wide">
+                    {result.status === "invalido"
+                      ? "Não encontrado"
+                      : STATUS_UI[result.status].label}
+                  </p>
+                  {result.reason && result.status !== "autorizado" && (
+                    <p className="text-xs opacity-90">{result.reason}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Câmera / resultado */}
+        {mode === "qr" && (
         <section className="card overflow-hidden">
           <div className="relative">
             {/* O elemento do leitor precisa existir (e não estar display:none)
@@ -508,6 +673,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
             )}
           </div>
         </section>
+        )}
 
         {/* Anotação de fraude: QR já usado, possivelmente por outra pessoa */}
         {flagTarget && (
@@ -587,7 +753,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
           </section>
         )}
 
-        {/* Registro manual: cadete que tentou entrar SEM QR */}
+        {/* Anotação de ocorrência (apuração) — NÃO é entrada válida */}
         {selectedSlot && (
           <section className="card">
             <button
@@ -596,7 +762,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
               className="flex w-full items-center justify-between rounded-t-2xl px-5 py-3 text-left"
             >
               <span className="flex items-center gap-2 text-sm font-semibold text-navy-800 dark:text-gray-100">
-                ➕ Registrar entrada sem QR
+                ⚠️ Anotar ocorrência (apuração)
               </span>
               <span
                 className={`text-slate-400 transition-transform ${
@@ -624,8 +790,9 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
                 ) : (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500 dark:text-gray-400">
-                      Para quem tentou entrar sem nenhum QR. Anote o cadete para
-                      apuração.
+                      Só para registrar uma ocorrência para apuração (ex.: sem QR
+                      e sem direito). NÃO conta como entrada. Para registrar uma
+                      entrada válida, use a “Leitura sem QR Code” acima.
                     </p>
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
@@ -662,7 +829,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
                       onClick={submitNoqr}
                       disabled={noqrBusy}
                     >
-                      {noqrBusy ? "Registrando…" : "Registrar entrada sem QR"}
+                      {noqrBusy ? "Registrando…" : "Registrar ocorrência"}
                     </button>
                   </div>
                 )}
