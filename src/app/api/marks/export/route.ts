@@ -436,9 +436,26 @@ export async function GET(req: Request) {
     conf.getCell("A1").value =
       "Conferência de entrada (quando o QR estiver lento)";
     conf.getCell("A1").font = { bold: true, size: 13 };
-    conf.getCell("A2").value =
+
+    // Seletor da refeição a conferir (a aba "Resultados" segue esta escolha).
+    conf.getCell("A2").value = "Refeição a conferir:";
+    conf.getCell("A2").font = { bold: true };
+    const confMeal = conf.getCell("B2");
+    confMeal.value = slotHeader(slots[0]); // padrão: 1ª refeição
+    confMeal.font = { bold: true, color: { argb: "FF1D4ED8" } };
+    confMeal.fill = solid("FFEFF6FF");
+    confMeal.dataValidation = {
+      type: "list",
+      allowBlank: false,
+      formulae: [mealRange],
+      showErrorMessage: true,
+      errorTitle: "Refeição inválida",
+      error: "Escolha uma refeição da lista.",
+    };
+
+    conf.getCell("A3").value =
       "Digite o NÚMERO (ex.: 25200 ou 25/200) ou o NOME de cada cadete que ENTRAR — um por linha.";
-    conf.getCell("A2").font = { italic: true, color: { argb: "FF64748B" } };
+    conf.getCell("A3").font = { italic: true, color: { argb: "FF64748B" } };
 
     const cHead = conf.getRow(4);
     cHead.getCell(1).value = "Nº ou Nome (digite)";
@@ -489,23 +506,16 @@ export async function GET(req: Request) {
     res.getCell("A1").value = "Resultados da conferência";
     res.getCell("A1").font = { bold: true, size: 13 };
 
-    res.getCell("A2").value = "Refeição:";
+    res.getCell("A2").value = "Refeição (escolha na aba Conferência):";
     res.getCell("A2").font = { bold: true };
+    // Espelha a refeição escolhida na aba Conferência (uma fonte só).
     const rMeal = res.getCell("B2");
-    rMeal.value = slotHeader(slots[0]); // padrão: 1ª refeição
+    rMeal.value = { formula: "'Conferência'!$B$2", result: slotHeader(slots[0]) };
     rMeal.font = { bold: true, color: { argb: "FF1D4ED8" } };
     rMeal.fill = solid("FFEFF6FF");
-    rMeal.dataValidation = {
-      type: "list",
-      allowBlank: false,
-      formulae: [mealRange],
-      showErrorMessage: true,
-      errorTitle: "Refeição inválida",
-      error: "Escolha uma refeição da lista.",
-    };
     // Índice da coluna da refeição escolhida (auxiliar, oculto em H1).
     res.getCell("H1").value = {
-      formula: "IFERROR(MATCH($B$2,Dados!$1:$1,0),0)",
+      formula: "IFERROR(MATCH('Conferência'!$B$2,Dados!$1:$1,0),0)",
       result: 5,
     };
 
