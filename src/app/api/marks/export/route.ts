@@ -423,28 +423,146 @@ export async function GET(req: Request) {
     const thin = { style: "thin" as const, color: { argb: "FFE2E8F0" } };
 
     // --- Aba "Conferência" (o sargento REGISTRA quem entra) ---
-    // Só confirma a identidade (número/nome/esq) — NÃO mostra se marcou. A
-    // análise de quem foi / não foi fica na aba "Resultados" (do admin).
+    // Uma linha por pessoa que entra: ESCOLHE a refeição naquela linha e digita
+    // o número/nome. Como a refeição fica em cada linha, dá para conferir várias
+    // refeições no mesmo arquivo e a aba "Resultados" conta certo, por refeição.
     const conf = wb.addWorksheet("Conferência", {
       views: [{ state: "frozen", ySplit: 4 }],
     });
-    conf.getColumn(1).width = 24;
-    conf.getColumn(2).width = 12;
-    conf.getColumn(3).width = 30;
-    conf.getColumn(4).width = 8;
+    conf.getColumn(1).width = 22; // Refeição
+    conf.getColumn(2).width = 22; // Nº ou Nome
+    conf.getColumn(3).width = 12; // Número
+    conf.getColumn(4).width = 30; // Cadete
+    conf.getColumn(5).width = 8; // Esq
 
     conf.getCell("A1").value =
       "Conferência de entrada (quando o QR estiver lento)";
     conf.getCell("A1").font = { bold: true, size: 13 };
+    conf.getCell("A2").value =
+      "Para cada cadete que ENTRAR: escolha a REFEIÇÃO e digite o NÚMERO (ex.: 25200 ou 25/200) ou o NOME. Dica: escolha a refeição na 1ª linha e copie para baixo.";
+    conf.getCell("A2").font = { italic: true, color: { argb: "FF64748B" } };
 
-    // Seletor da refeição a conferir (a aba "Resultados" segue esta escolha).
-    conf.getCell("A2").value = "Refeição a conferir:";
-    conf.getCell("A2").font = { bold: true };
-    const confMeal = conf.getCell("B2");
-    confMeal.value = slotHeader(slots[0]); // padrão: 1ª refeição
-    confMeal.font = { bold: true, color: { argb: "FF1D4ED8" } };
-    confMeal.fill = solid("FFEFF6FF");
-    confMeal.dataValidation = {
+    const cHead = conf.getRow(4);
+    cHead.getCell(1).value = "Refeição";
+    cHead.getCell(2).value = "Nº ou Nome (digite)";
+    cHead.getCell(3).value = "Número";
+    cHead.getCell(4).value = "Cadete";
+    cHead.getCell(5).value = "Esq";
+    styleHeaderRow(cHead);
+
+    const C_FIRST = 5;
+    const C_LAST = 704; // ~700 linhas de conferência
+    for (let r = C_FIRST; r <= C_LAST; r++) {
+      // Dropdown da refeição nesta linha.
+      conf.getCell(`A${r}`).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [mealRange],
+      };
+      // Helpers ocultos: G = índice do cadete (pelo nº/nome em B);
+      // H = índice da coluna da refeição (col A); I = autorizado nessa refeição.
+      conf.getCell(`G${r}`).value = {
+        formula:
+          `IF(TRIM($B${r})="","",IFERROR(MATCH(SUBSTITUTE(TRIM($B${r}),"/",""),Dados!$D:$D,0),` +
+          `IFERROR(MATCH(TRIM($B${r}),Dados!$B:$B,0),IFERROR(MATCH(TRIM($B${r})&"*",Dados!$B:$B,0),0))))`,
+        result: "",
+      };
+      conf.getCell(`H${r}`).value = {
+        formula: `IFERROR(MATCH($A${r},Dados!$1:$1,0),0)`,
+        result: 0,
+      };
+      conf.getCell(`I${r}`).value = {
+        formula:
+          `IF(OR($G${r}="",$G${r}=0,$H${r}=0),"",` +
+          `IF(OR(INDEX(Dados!$A:$XFD,$G${r},$H${r})="Sim",INDEX(Dados!$A:$XFD,$G${r},$H${r})="Obrigatória"),"Sim","Não"))`,
+        result: "",
+      };
+      // Colunas visíveis: número, cadete e esquadrão resolvidos (confirmação).
+      conf.getCell(`C${r}`).value = {
+        formula: `IF($G${r}="","",IF($G${r}=0,"não encontrado",INDEX(Dados!$A:$XFD,$G${r},1)))`,
+        result: "",
+      };
+      conf.getCell(`D${r}`).value = {
+        formula: `IF(OR($G${r}="",$G${r}=0),"",INDEX(Dados!$A:$XFD,$G${r},2))`,
+        result: "",
+      };
+      conf.getCell(`E${r}`).value = {
+        formula: `IF(OR($G${r}="",$G${r}=0),"",INDEX(Dados!$A:$XFD,$G${r},3))`,
+        result: "",
+      };
+      for (let col = 1; col <= 5; col++) {
+        const cell = conf.getCell(r, col);
+        cell.border = { top: thin, left: thin, bottom: thin, right: thin };
+        if (col >= 3) cell.alignment = { horizontal: "center" };
+      }
+    }
+    conf.getColumn(7).hidden = true; // G auxiliar (cadete)
+    conf.getColumn(8).hidden = true; // H auxiliar (refeição)
+    conf.getColumn(9).hidden = true; // I auxiliar (autorizado)
+
+    // --- Aba "Resultados" (do admin) ---
+    const res = wb.addWorksheet("Resultados");
+    res.getColumn(1).width = 20;
+    res.getColumn(2).width = 28;
+    res.getColumn(3).width = 12;
+    res.getColumn(4).width = 20;
+    res.getColumn(5).width = 20;
+
+    res.getCell("A1").value = "Resultados da conferência";
+    res.getCell("A1").font = { bold: true, size: 13 };
+
+    // ---- Seção 1: resumo por refeição (uma linha por refeição) ----
+    res.getCell("A2").value = "Resumo por refeição";
+    res.getCell("A2").font = { bold: true, size: 12 };
+    const sumHead = res.getRow(3);
+    sumHead.getCell(1).value = "Refeição";
+    sumHead.getCell(2).value = "Marcaram";
+    sumHead.getCell(3).value = "Foram";
+    sumHead.getCell(4).value = "Não foram";
+    sumHead.getCell(5).value = "Entraram sem marcar";
+    styleHeaderRow(sumHead);
+
+    // Nº de autorizados por refeição (marcaram / obrigatória; última hora só se
+    // aprovada) — estático, igual ao total do Resumo.
+    const authorizedTotal = (s: SlotRow): number =>
+      [1, 2, 3, 4].reduce((sum, sq) => sum + eatNumber(s, sq), 0);
+
+    const SUM_FIRST = 4;
+    slots.forEach((s, i) => {
+      const r = SUM_FIRST + i;
+      res.getCell(`A${r}`).value = slotHeader(s);
+      res.getCell(`B${r}`).value = authorizedTotal(s);
+      // Foram = entradas registradas nessa refeição que estavam autorizadas.
+      res.getCell(`C${r}`).value = {
+        formula: `COUNTIFS('Conferência'!$A:$A,$A${r},'Conferência'!$I:$I,"Sim")`,
+        result: 0,
+      };
+      // Não foram = autorizados - foram (nunca negativo).
+      res.getCell(`D${r}`).value = { formula: `MAX(0,$B${r}-$C${r})`, result: 0 };
+      // Entraram sem marcar = entradas registradas sem direito à refeição.
+      res.getCell(`E${r}`).value = {
+        formula: `COUNTIFS('Conferência'!$A:$A,$A${r},'Conferência'!$I:$I,"Não")`,
+        result: 0,
+      };
+      for (let col = 1; col <= 5; col++) {
+        const cell = res.getCell(r, col);
+        cell.border = { top: thin, left: thin, bottom: thin, right: thin };
+        if (col >= 2) cell.alignment = { horizontal: "center" };
+      }
+      res.getCell(`C${r}`).fill = solid("FFD1FAE5");
+      res.getCell(`D${r}`).fill = solid("FFFEE2E2");
+      res.getCell(`E${r}`).fill = solid("FFFEF3C7");
+    });
+
+    // ---- Seção 2: detalhe (quem foi / quem não foi) de UMA refeição ----
+    const detTitle = SUM_FIRST + slots.length + 1;
+    res.getCell(`A${detTitle}`).value = "Detalhe da refeição:";
+    res.getCell(`A${detTitle}`).font = { bold: true, size: 12 };
+    const detMeal = res.getCell(`B${detTitle}`);
+    detMeal.value = slotHeader(slots[0]);
+    detMeal.font = { bold: true, color: { argb: "FF1D4ED8" } };
+    detMeal.fill = solid("FFEFF6FF");
+    detMeal.dataValidation = {
       type: "list",
       allowBlank: false,
       formulae: [mealRange],
@@ -452,135 +570,52 @@ export async function GET(req: Request) {
       errorTitle: "Refeição inválida",
       error: "Escolha uma refeição da lista.",
     };
-
-    conf.getCell("A3").value =
-      "Digite o NÚMERO (ex.: 25200 ou 25/200) ou o NOME de cada cadete que ENTRAR — um por linha.";
-    conf.getCell("A3").font = { italic: true, color: { argb: "FF64748B" } };
-
-    const cHead = conf.getRow(4);
-    cHead.getCell(1).value = "Nº ou Nome (digite)";
-    cHead.getCell(2).value = "Número";
-    cHead.getCell(3).value = "Cadete";
-    cHead.getCell(4).value = "Esq";
-    styleHeaderRow(cHead);
-
-    const C_FIRST = 5;
-    const C_LAST = 704; // ~700 linhas de conferência
-    for (let r = C_FIRST; r <= C_LAST; r++) {
-      // rIdx (col F, oculta): número sem barra, nome exato, nome "começa com".
-      conf.getCell(`F${r}`).value = {
-        formula:
-          `IF(TRIM($A${r})="","",IFERROR(MATCH(SUBSTITUTE(TRIM($A${r}),"/",""),Dados!$D:$D,0),` +
-          `IFERROR(MATCH(TRIM($A${r}),Dados!$B:$B,0),IFERROR(MATCH(TRIM($A${r})&"*",Dados!$B:$B,0),0))))`,
-        result: "",
-      };
-      conf.getCell(`B${r}`).value = {
-        formula: `IF($F${r}="","",IF($F${r}=0,"não encontrado",INDEX(Dados!$A:$XFD,$F${r},1)))`,
-        result: "",
-      };
-      conf.getCell(`C${r}`).value = {
-        formula: `IF(OR($F${r}="",$F${r}=0),"",INDEX(Dados!$A:$XFD,$F${r},2))`,
-        result: "",
-      };
-      conf.getCell(`D${r}`).value = {
-        formula: `IF(OR($F${r}="",$F${r}=0),"",INDEX(Dados!$A:$XFD,$F${r},3))`,
-        result: "",
-      };
-      for (let col = 1; col <= 4; col++) {
-        const cell = conf.getCell(r, col);
-        cell.border = { top: thin, left: thin, bottom: thin, right: thin };
-        if (col >= 2) cell.alignment = { horizontal: "center" };
-      }
-    }
-    conf.getColumn(6).hidden = true; // coluna auxiliar F
-
-    // --- Aba "Resultados" (do admin): quantos e quais foram / não foram ---
-    const res = wb.addWorksheet("Resultados", {
-      views: [{ state: "frozen", ySplit: 10 }],
-    });
-    res.getColumn(1).width = 14;
-    res.getColumn(2).width = 30;
-    res.getColumn(3).width = 8;
-    res.getColumn(4).width = 20;
-
-    res.getCell("A1").value = "Resultados da conferência";
-    res.getCell("A1").font = { bold: true, size: 13 };
-
-    res.getCell("A2").value = "Refeição (escolha na aba Conferência):";
-    res.getCell("A2").font = { bold: true };
-    // Espelha a refeição escolhida na aba Conferência (uma fonte só).
-    const rMeal = res.getCell("B2");
-    rMeal.value = { formula: "'Conferência'!$B$2", result: slotHeader(slots[0]) };
-    rMeal.font = { bold: true, color: { argb: "FF1D4ED8" } };
-    rMeal.fill = solid("FFEFF6FF");
-    // Índice da coluna da refeição escolhida (auxiliar, oculto em H1).
-    res.getCell("H1").value = {
-      formula: "IFERROR(MATCH('Conferência'!$B$2,Dados!$1:$1,0),0)",
+    // Índice da coluna da refeição do detalhe (auxiliar, oculto em K1).
+    res.getCell("K1").value = {
+      formula: `IFERROR(MATCH($B$${detTitle},Dados!$1:$1,0),0)`,
       result: 5,
     };
 
-    const R_FIRST = 11;
-    const R_LAST = 10 + roster.length;
-    const dRange = `$D$${R_FIRST}:$D$${R_LAST}`;
-    const fRange = `$F$${R_FIRST}:$F$${R_LAST}`;
+    const detNote = detTitle + 1;
+    res.getCell(`A${detNote}`).value =
+      "Use o filtro da coluna Resultado (seta no cabeçalho) para ver só quem foi ou só quem não foi.";
+    res.getCell(`A${detNote}`).font = {
+      italic: true,
+      color: { argb: "FF64748B" },
+    };
 
-    // Cartões de contagem (estilo o site).
-    const cards: Array<[string, string, string]> = [
-      [
-        "Marcaram (deviam ir)",
-        `COUNTIF(${fRange},"Sim")+COUNTIF(${fRange},"Obrigatória")`,
-        "FFEFF2F7",
-      ],
-      ["Foram (entraram)", `COUNTIF(${dRange},"Foi")`, "FFD1FAE5"],
-      ["Não foram (faltaram)", `COUNTIF(${dRange},"Faltou")`, "FFFEE2E2"],
-      [
-        "Entraram sem marcar",
-        `COUNTIF(${dRange},"Entrou sem marcar")`,
-        "FFFEF3C7",
-      ],
-    ];
-    cards.forEach(([label, formula, fill], i) => {
-      const row = 4 + i;
-      const lc = res.getCell(`A${row}`);
-      lc.value = label;
-      lc.font = { bold: true };
-      const vc = res.getCell(`B${row}`);
-      vc.value = { formula, result: 0 };
-      vc.font = { bold: true, size: 12 };
-      vc.alignment = { horizontal: "center" };
-      vc.fill = solid(fill);
-    });
+    const detHead = detTitle + 2;
+    const dHead = res.getRow(detHead);
+    dHead.getCell(1).value = "Número";
+    dHead.getCell(2).value = "Nome";
+    dHead.getCell(3).value = "Esq";
+    dHead.getCell(4).value = "Resultado";
+    styleHeaderRow(dHead);
 
-    // Cabeçalho da tabela (linha 10).
-    const rHead = res.getRow(10);
-    rHead.getCell(1).value = "Número";
-    rHead.getCell(2).value = "Nome";
-    rHead.getCell(3).value = "Esq";
-    rHead.getCell(4).value = "Resultado";
-    styleHeaderRow(rHead);
-
+    const D_FIRST = detHead + 1;
+    const D_LAST = D_FIRST + roster.length - 1;
     roster.forEach((c, i) => {
-      const r = R_FIRST + i;
+      const r = D_FIRST + i;
       res.getCell(`A${r}`).value = c.number;
       res.getCell(`B${r}`).value = c.name;
       const esqCell = res.getCell(`C${r}`);
       esqCell.value = SQUADRON_SHORT[c.squadron] ?? "—";
       esqCell.alignment = { horizontal: "center" };
-      // Situação do cadete na refeição escolhida (auxiliar, oculta em F).
-      res.getCell(`F${r}`).value = {
-        formula: `IFERROR(INDEX(Dados!$A:$XFD,MATCH($A${r},Dados!$A:$A,0),$H$1),"—")`,
+      // Situação do cadete na refeição do detalhe (auxiliar, oculta em G).
+      res.getCell(`G${r}`).value = {
+        formula: `IFERROR(INDEX(Dados!$A:$XFD,MATCH($A${r},Dados!$A:$A,0),$K$1),"—")`,
         result: "",
       };
-      // Entrou? (registrado na aba Conferência) — auxiliar, oculta em G.
-      res.getCell(`G${r}`).value = {
-        formula: `IF(COUNTIF('Conferência'!$B:$B,$A${r})>0,1,0)`,
+      // Entrou NESSA refeição? (registrado na Conferência) — auxiliar, oculta H.
+      res.getCell(`H${r}`).value = {
+        formula: `IF(COUNTIFS('Conferência'!$C:$C,$A${r},'Conferência'!$A:$A,$B$${detTitle})>0,1,0)`,
         result: 0,
       };
       // Resultado final: Foi / Faltou / Entrou sem marcar / (vazio).
       res.getCell(`D${r}`).value = {
         formula:
-          `IF(OR($F${r}="Sim",$F${r}="Obrigatória"),IF($G${r}=1,"Foi","Faltou"),` +
-          `IF($G${r}=1,"Entrou sem marcar",""))`,
+          `IF(OR($G${r}="Sim",$G${r}="Obrigatória"),IF($H${r}=1,"Foi","Faltou"),` +
+          `IF($H${r}=1,"Entrou sem marcar",""))`,
         result: "",
       };
       res.getCell(`D${r}`).alignment = { horizontal: "center" };
@@ -594,19 +629,19 @@ export async function GET(req: Request) {
       }
     });
 
-    res.getColumn(6).hidden = true; // F auxiliar (situação)
-    res.getColumn(7).hidden = true; // G auxiliar (entrou?)
-    res.getColumn(8).hidden = true; // H auxiliar (índice da refeição)
+    res.getColumn(7).hidden = true; // G auxiliar (situação)
+    res.getColumn(8).hidden = true; // H auxiliar (entrou?)
+    res.getColumn(11).hidden = true; // K auxiliar (índice da refeição)
 
     // Filtro para o admin separar "Foi" / "Faltou" nas listas.
     res.autoFilter = {
-      from: { row: 10, column: 1 },
-      to: { row: R_LAST, column: 4 },
+      from: { row: detHead, column: 1 },
+      to: { row: D_LAST, column: 4 },
     };
 
     // Cores do Resultado: verde = foi, vermelho = faltou, amarelo = sem marcar.
     res.addConditionalFormatting({
-      ref: `D${R_FIRST}:D${R_LAST}`,
+      ref: `D${D_FIRST}:D${D_LAST}`,
       rules: [
         {
           type: "containsText",
