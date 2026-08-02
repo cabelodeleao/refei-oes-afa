@@ -114,7 +114,6 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
   // Modo de leitura: câmera (QR) ou digitação do número (sem QR).
   const [mode, setMode] = useState<"qr" | "manual">("qr");
   const [manualNumber, setManualNumber] = useState("");
-  const [manualBusy, setManualBusy] = useState(false);
   const [manualError, setManualError] = useState("");
   const manualInputRef = useRef<HTMLInputElement>(null);
 
@@ -314,9 +313,11 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
     }, RESULT_MS);
   }
 
-  // Leitura SEM QR: registra a entrada pelo número que a pessoa fala. Roda a
-  // mesma validação/registro do QR (autoriza + grava em meal_entries + conta).
-  async function submitManual() {
+  // Leitura SEM QR: registra a entrada pelo número que a pessoa fala. Para ser
+  // quase instantâneo, é OTIMISTA — limpa o campo e mantém o foco na hora, e o
+  // envio corre em segundo plano; o resultado (verde/vermelho) aparece quando o
+  // servidor responde, sem travar a digitação do próximo número.
+  function submitManual() {
     if (!slotId) {
       setManualError("Selecione a refeição antes.");
       return;
@@ -326,28 +327,33 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
       setManualError("Digite o número do cadete.");
       return;
     }
-    setManualBusy(true);
     setManualError("");
+    setManualNumber(""); // libera o campo imediatamente
+    manualInputRef.current?.focus();
+    void sendManual(num, slotId); // dispara e segue (não bloqueia)
+  }
+
+  // Envio em segundo plano de uma leitura por número.
+  async function sendManual(num: string, slot: string) {
     try {
       const res = await apiFetch("/api/fiscal/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ number: num, slot_id: slotId }),
+        body: JSON.stringify({ number: num, slot_id: slot }),
       });
       const data: ScanResult = await res.json();
       if (!res.ok || !data.status) {
-        setResult({ status: "invalido", reason: data?.reason ?? "Erro na leitura" });
+        setResult({
+          status: "invalido",
+          reason: data?.reason ?? "Erro na leitura",
+        });
         beep("err");
       } else {
         applyScanData(data);
       }
-      setManualNumber("");
-      manualInputRef.current?.focus();
     } catch {
       setResult({ status: "invalido", reason: "Erro de conexão" });
       beep("err");
-    } finally {
-      setManualBusy(false);
     }
     // Limpa o destaque depois de alguns segundos.
     clearTimeout(resultTimer.current);
@@ -538,18 +544,18 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    void submitManual();
+                    submitManual();
                   }
                 }}
-                disabled={!slotId || manualBusy}
+                disabled={!slotId}
                 autoFocus
               />
               <button
                 className="btn-primary px-5"
                 onClick={submitManual}
-                disabled={!slotId || manualBusy}
+                disabled={!slotId}
               >
-                {manualBusy ? "…" : "Registrar"}
+                Registrar
               </button>
             </div>
             {!slotId && (

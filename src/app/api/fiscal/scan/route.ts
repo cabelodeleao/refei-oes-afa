@@ -69,6 +69,14 @@ export async function POST(req: Request) {
     );
   }
 
+  // A refeição só depende do slot_id: busca em PARALELO com o cadete (reduz uma
+  // ida ao banco no caminho comum — importante na leitura rápida por número).
+  const slotPromise = supabaseAdmin
+    .from("meal_slots")
+    .select("id, squadrons")
+    .eq("id", slotId)
+    .maybeSingle();
+
   // 1) Identifica o cadete: por QR (token) ou por número digitado.
   let cadet: {
     id: string;
@@ -126,12 +134,8 @@ export async function POST(req: Request) {
     }
   }
 
-  // 2) Slot.
-  const { data: slot, error: slotErr } = await supabaseAdmin
-    .from("meal_slots")
-    .select("id, squadrons")
-    .eq("id", slotId)
-    .maybeSingle();
+  // 2) Slot (já iniciado em paralelo lá em cima).
+  const { data: slot, error: slotErr } = await slotPromise;
 
   if (slotErr) {
     return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
@@ -207,28 +211,9 @@ export async function POST(req: Request) {
     });
   }
 
-  // 4) Autorizado: registra a entrada (apenas uma vez por cadete/slot).
-  const { data: existing, error: existErr } = await supabaseAdmin
-    .from("meal_entries")
-    .select("entered_at")
-    .eq("cadet_id", cadet.id)
-    .eq("slot_id", slotId)
-    .maybeSingle();
-
-  if (existErr) {
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
-  }
-
-  if (existing) {
-    const attemptId = await logAttempt(cadet.id, slotId, session.sub, "duplicado");
-    return NextResponse.json({
-      status: "ja_registrado" as ScanStatus,
-      cadet: cadetInfo,
-      entered_at: existing.entered_at,
-      attempt_id: attemptId,
-    });
-  }
-
+  // 4) Autorizado: registra a entrada. Em vez de checar antes se já existe
+  // (uma consulta a mais), tenta inserir direto e trata o duplicado pelo índice
+  // único (UNIQUE cadet_id, slot_id) — mais rápido no caminho comum.
   const { data: inserted, error: insErr } = await supabaseAdmin
     .from("meal_entries")
     .insert({ cadet_id: cadet.id, slot_id: slotId, fiscal_id: session.sub })
@@ -236,7 +221,7 @@ export async function POST(req: Request) {
     .single();
 
   if (insErr) {
-    // Corrida: outra leitura registrou no mesmo instante (viola o UNIQUE).
+    // Já existe (mesma leitura repetida) ou corrida no mesmo instante.
     if (insErr.code === "23505") {
       const attemptId = await logAttempt(cadet.id, slotId, session.sub, "duplicado");
       const { data: again } = await supabaseAdmin
