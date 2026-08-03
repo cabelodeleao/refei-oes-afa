@@ -111,9 +111,11 @@ create table if not exists public.scan_attempts (
 
 -- --------------------------------------------------------------------------
 -- Tabela: menu_photos
--- Foto do cardápio da semana enviada pelo admin e exibida aos cadetes.
--- Apenas 1 registro com active = true por vez (a API desativa os anteriores).
+-- Fotos do cardápio da semana enviadas pelo admin e exibidas aos cadetes.
+-- VÁRIOS registros podem ter active = true ao mesmo tempo (uma imagem por dia:
+-- sexta-feira, sábado, domingo…); o cadete vê todas em um carrossel.
 --   storage_path: caminho do arquivo no bucket "cardapios" (p/ remoção).
+--   sort_order:   ordem de exibição das imagens que estão no ar.
 -- --------------------------------------------------------------------------
 create table if not exists public.menu_photos (
   id           uuid primary key default gen_random_uuid(),
@@ -121,6 +123,7 @@ create table if not exists public.menu_photos (
   image_url    text not null,
   storage_path text,
   active       boolean default true,
+  sort_order   int not null default 0,
   created_at   timestamptz default now()
 );
 
@@ -135,6 +138,8 @@ create index if not exists idx_meal_entries_slot  on public.meal_entries (slot_i
 create index if not exists idx_meal_entries_cadet on public.meal_entries (cadet_id);
 create index if not exists idx_cadets_is_fiscal   on public.cadets (is_fiscal);
 create index if not exists idx_menu_photos_active on public.menu_photos (active);
+create index if not exists idx_menu_photos_active_order
+  on public.menu_photos (active, sort_order);
 create index if not exists idx_scan_attempts_slot   on public.scan_attempts (slot_id);
 create index if not exists idx_scan_attempts_result on public.scan_attempts (result);
 create index if not exists idx_scan_attempts_cadet  on public.scan_attempts (cadet_id);

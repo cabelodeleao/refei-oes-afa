@@ -61,7 +61,7 @@ Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo,
 - **meal_marks**: id, cadet_id, slot_id, created_at. UNIQUE(cadet_id, slot_id). Existência da linha = marcou "Sim".
 - **meal_entries**: registro oficial de entradas autorizadas (fiscalização). UNIQUE(cadet_id, slot_id)
 - **scan_attempts**: log de TODAS as leituras de QR (result: 'autorizado'/'nao_marcou'/'duplicado'), flagged_person, fiscal_note
-- **menu_photos**: cardápio da semana (title, image_url, storage_path, active)
+- **menu_photos**: cardápio da semana (title, image_url, storage_path, active, sort_order). VÁRIAS imagens podem estar ativas ao mesmo tempo (uma por dia: sexta, sábado, domingo…, até 6); o cadete vê todas em um carrossel, na ordem de sort_order.
 
 ## Papéis de usuário
 - **Cadete**: marca refeições do próprio esquadrão, vê cardápio, tem QR code. Vai para /cadete.

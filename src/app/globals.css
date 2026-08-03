@@ -196,9 +196,27 @@ body {
 }
 
 /* Cardápio: imagem inteira visível, clicável p/ ampliar */
-.cad-menu {
+/* Cardápio do cadete: carrossel com uma imagem por dia (sexta, sábado…).
+   Com uma imagem só, some tudo que é de navegação e vira um banner simples. */
+.cad-menu-wrap {
   margin-top: 24px;
   width: 100%;
+}
+.cad-menu-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.cad-menu-track::-webkit-scrollbar {
+  display: none;
+}
+.cad-menu-slide {
+  position: relative;
+  flex: 0 0 100%;
+  scroll-snap-align: center;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -207,10 +225,70 @@ body {
   display: block;
   padding: 0;
 }
-.cad-menu img {
+.cad-menu-slide img {
   display: block;
   width: 100%;
   height: auto;
+}
+/* Etiqueta com o dia da imagem (canto superior esquerdo). */
+.cad-menu-tag {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  padding: 4px 11px;
+  border-radius: 20px;
+  background: rgba(12, 16, 24, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e8edf4;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cad-menu-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+}
+.cad-menu-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+  transition: width 0.18s, background 0.18s;
+}
+.cad-menu-dot.on {
+  width: 20px;
+  border-radius: 4px;
+  background: #3880ff;
+}
+/* Setas de navegação na tela cheia (desktop). */
+.cad-menu-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(12, 16, 24, 0.7);
+  color: #e8edf4;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cad-menu-nav.left {
+  left: 16px;
+}
+.cad-menu-nav.right {
+  right: 16px;
 }
 
 .cad-sect {

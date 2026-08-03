@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import { MAX_MENU_IMAGES } from "@/lib/constants";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,9 @@ const BUCKET = "cardapios";
 type Params = { params: { id: string } };
 
 // PATCH /api/menu-photo/[id]  (admin) — { active: boolean }
-// Ativar um cardápio desativa os demais (só 1 ativo por vez).
+// O cardápio pode ter VÁRIAS imagens no ar ao mesmo tempo (uma por dia), então
+// ativar uma imagem NÃO desativa as outras: ela entra no final da ordem de
+// exibição. Desativar tira só aquela imagem do ar.
 export async function PATCH(req: Request, { params }: Params) {
   const session = await getSession();
   if (!session?.is_admin) {
@@ -24,21 +27,34 @@ export async function PATCH(req: Request, { params }: Params) {
   }
   const active = body.active === true;
 
+  // Ao ativar: respeita o teto de imagens no ar e coloca a imagem no final.
+  const patch: { active: boolean; sort_order?: number } = { active };
   if (active) {
-    const { error } = await supabaseAdmin
+    const { data: current, error: curErr } = await supabaseAdmin
       .from("menu_photos")
-      .update({ active: false })
-      .eq("active", true);
-    if (error) {
+      .select("id, sort_order")
+      .eq("active", true)
+      .order("sort_order", { ascending: false });
+    if (curErr) {
       return NextResponse.json({ error: "Erro ao atualizar cardápio" }, { status: 500 });
     }
+    const actives = current ?? [];
+    if (!actives.some((m) => m.id === params.id) && actives.length >= MAX_MENU_IMAGES) {
+      return NextResponse.json(
+        {
+          error: `O cardápio já tem o máximo de ${MAX_MENU_IMAGES} imagens no ar. Desative uma antes de ativar outra.`,
+        },
+        { status: 409 }
+      );
+    }
+    patch.sort_order = actives.length > 0 ? actives[0].sort_order + 1 : 0;
   }
 
   const { data, error } = await supabaseAdmin
     .from("menu_photos")
-    .update({ active })
+    .update(patch)
     .eq("id", params.id)
-    .select("id, title, image_url, active, created_at")
+    .select("id, title, image_url, active, sort_order, created_at")
     .single();
   if (error) {
     return NextResponse.json({ error: "Erro ao atualizar cardápio" }, { status: 500 });

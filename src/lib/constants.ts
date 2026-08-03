@@ -23,6 +23,21 @@ export const MEAL_ICONS: Record<MealType, string> = {
   ceia: "✨",
 };
 
+// Cardápio: quantas imagens podem ficar no ar ao mesmo tempo. O padrão da
+// semana são 3 (sexta-feira, sábado e domingo); a folga cobre semanas com
+// feriado emendado, em que o admin publica uma imagem a mais.
+export const MENU_IMAGES_DEFAULT = 3;
+export const MAX_MENU_IMAGES = 6;
+// Títulos sugeridos ao publicar (o admin pode trocar por qualquer texto).
+export const MENU_TITLE_SUGGESTIONS = [
+  "Sexta-feira",
+  "Sábado",
+  "Domingo",
+  "Segunda-feira",
+  "Terça-feira",
+  "Quarta-feira",
+];
+
 export const ALL_SQUADRONS = [1, 2, 3, 4] as const;
 
 // Estado de acesso de um esquadrão a uma refeição.
