@@ -19,6 +19,7 @@ import {
   isAutoLocked,
   effectiveLocked,
   mealPhase,
+  autoLockStamp,
   autoLockDate,
   closeLockDate,
   type LockOverride,
@@ -140,6 +141,9 @@ export async function GET(req: Request) {
   const optOut = isOptOutSquadron(session.squadron);
 
   return NextResponse.json({
+    // Data de hoje no fuso de Brasília: o cadete usa para escrever "hoje" /
+    // "amanhã" no aviso de bloqueio, sem depender do relógio do celular.
+    today,
     slots: visible.map((s) => {
       let marked: boolean;
       if (s.access === "opcional") {
@@ -163,6 +167,14 @@ export async function GET(req: Request) {
         locked: phase === "fechada", // compat: totalmente travada
         // Fim da segunda chance (quando trava de vez): "marca até qui 23:59".
         close_date: closeLockDate(s.date),
+        // Quando a marcação normal ainda vai fechar sozinha (4 dias antes,
+        // 23:59) — para avisar o cadete "marque até segunda-feira, 23:59".
+        // null quando isso não se aplica: já bloqueada, ou exceção do admin
+        // que liberou a refeição depois do prazo automático.
+        lock_date:
+          phase === "aberta" && now < autoLockStamp(s.date)
+            ? autoLockDate(s.date)
+            : null,
         access: s.access, // "opcional" | "todos"
         marked,
         // Marcação de última hora do cadete: fica amarela (pendente) até o

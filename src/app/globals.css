@@ -491,6 +491,21 @@ body {
   border-radius: 20px;
   white-space: nowrap;
 }
+/* Aviso do prazo do bloqueio automático (dia ainda aberto para marcação).
+   Azul = marcação livre, mesma cor das refeições marcadas. */
+.cad-open-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 2px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  background: rgba(56, 128, 255, 0.08);
+  border: 1px solid rgba(56, 128, 255, 0.28);
+  color: #a8c3ec;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
 /* Aviso amarelo da fase de segunda chance dentro do card do dia. */
 .cad-late-warn {
   display: flex;

@@ -15,7 +15,13 @@ import {
 import MenuBanner from "@/components/MenuBanner";
 import MyQrCode from "@/components/MyQrCode";
 import { useToast } from "@/components/Toast";
-import { formatLongDate, weekdayShort } from "@/lib/dates";
+import {
+  formatLongDate,
+  weekdayShort,
+  parseISODate,
+  addDays,
+  toISODate,
+} from "@/lib/dates";
 
 type Phase = "aberta" | "segunda_chance" | "fechada";
 
@@ -27,6 +33,7 @@ interface Slot {
   phase: Phase;
   locked: boolean; // = phase "fechada" (compat)
   close_date: string; // último dia p/ marcar (1 dia antes, 23:59)
+  lock_date: string | null; // dia em que bloqueia sozinha (23:59); null = n/a
   marked: boolean;
   late: boolean; // marcação de última hora (segunda chance)
   late_approved: boolean; // já aprovada pelo admin? (aí vira azul)
@@ -38,6 +45,18 @@ type LateReason = "punido" | "outro";
 interface Props {
   user: { name: string; number: string; squadron: number };
   qrToken: string | null;
+}
+
+// Como escrever um dia no aviso de bloqueio: "hoje", "amanhã" ou o dia da
+// semana por extenso com a data ("segunda-feira (04/08)"). `today` vem do
+// servidor (fuso de Brasília) — não depende do relógio do celular.
+function relativeDayLabel(iso: string, today: string): string {
+  if (today) {
+    if (iso === today) return "hoje";
+    if (iso === toISODate(addDays(parseISODate(today), 1))) return "amanhã";
+  }
+  const [weekday, date] = formatLongDate(iso).split(", ");
+  return `${weekday.toLowerCase()} (${date})`;
 }
 
 // Agrupa slots por data. asc=false coloca o dia mais recente primeiro (histórico).
@@ -56,6 +75,8 @@ export default function CadeteClient({ user, qrToken }: Props) {
   const toast = useToast();
   const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
+  // Data de hoje no fuso de Brasília, vinda do servidor (para "hoje"/"amanhã").
+  const [today, setToday] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pwOpen, setPwOpen] = useState(false);
@@ -75,8 +96,10 @@ export default function CadeteClient({ user, qrToken }: Props) {
       try {
         const res = await apiFetch("/api/slots");
         const data = await res.json();
-        if (res.ok) setSlots(data.slots ?? []);
-        else setError(data.error ?? "Erro ao carregar refeições");
+        if (res.ok) {
+          setSlots(data.slots ?? []);
+          setToday(data.today ?? "");
+        } else setError(data.error ?? "Erro ao carregar refeições");
       } catch {
         setError("Erro de conexão");
       } finally {
@@ -262,6 +285,11 @@ export default function CadeteClient({ user, qrToken }: Props) {
     // Dia com refeições em segunda chance (marcação de última hora disponível).
     const lateSlots = daySlots.filter(isLateMarkable);
     const lastDay = lateSlots.length > 0 ? lateSlots[0].close_date : null;
+    // Dia ainda aberto: quando a marcação vai fechar sozinha (4 dias antes,
+    // 23:59). Só considera refeições que o cadete realmente pode alterar.
+    const lockDate =
+      daySlots.find((s) => s.lock_date && (canMark(s) || canUnmark(s)))
+        ?.lock_date ?? null;
     return (
       <div className="cad-day" key={date}>
         <div className="cad-day-head">
@@ -283,6 +311,17 @@ export default function CadeteClient({ user, qrToken }: Props) {
             )}
           </div>
         </div>
+
+        {/* Aviso do bloqueio automático: até quando dá para marcar normalmente. */}
+        {!readOnly && lockDate && (
+          <div className="cad-open-hint">
+            <span aria-hidden>🕒</span>
+            <span>
+              Marque até {relativeDayLabel(lockDate, today)}, 23:59 — depois a
+              refeição é bloqueada automaticamente.
+            </span>
+          </div>
+        )}
 
         {/* Aviso da fase de segunda chance (marcação de última hora). */}
         {!readOnly && lateSlots.length > 0 && (
