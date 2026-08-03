@@ -304,11 +304,16 @@ export default function CadeteClient({ user, qrToken }: Props) {
             const latePending = isLatePending(slot); // marcada, aguardando admin
             const clickable = canMark(slot) || canUnmark(slot);
 
+            // Marcada e já bloqueada (automático ou pelo admin): continua valendo,
+            // mas não dá mais para desmarcar -> VERDE com cadeado.
+            const lockedMarked = slot.phase === "segunda_chance" && slot.marked;
+
             // Cor por situação (feedback redundante com o texto da pílula):
             //  última hora pendente -> AMARELO (só vira azul quando o admin aprova)
             //  fechada  -> cinza (verde/vermelho conforme a escolha travada)
             //  estrita  -> verde "Obrigatória"
             //  2ª chance p/ marcar -> AMARELO (última hora)
+            //  marcada e bloqueada -> VERDE com cadeado (não pode desmarcar)
             //  marcada  -> azul  ·  não marcada -> neutro
             const stateClass = latePending
               ? "late"
@@ -318,6 +323,8 @@ export default function CadeteClient({ user, qrToken }: Props) {
               ? "lock"
               : lateMark
               ? "late"
+              : lockedMarked
+              ? "locked-on"
               : slot.marked
               ? "on"
               : "off";
@@ -334,6 +341,8 @@ export default function CadeteClient({ user, qrToken }: Props) {
               <span className="cad-pill-req">Obrigatória</span>
             ) : lateMark ? (
               <span className="cad-pill-late">Marcar</span>
+            ) : lockedMarked ? (
+              <span className="cad-pill-lock-yes">🔒 Sim</span>
             ) : slot.marked ? (
               <span className="cad-pill-box">✓</span>
             ) : (

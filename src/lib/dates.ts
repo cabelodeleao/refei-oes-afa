@@ -131,7 +131,10 @@ export function isAutoLocked(
 
 // Intenção manual do admin sobre o bloqueio de uma refeição:
 //   null / undefined -> segue a regra automática (as 3 fases abaixo)
-//   "bloqueado"      -> admin travou manualmente (fechada de vez, sem 2ª chance)
+//   "bloqueado"      -> admin travou manualmente: encerra a marcação normal na
+//                       hora, mas a SEGUNDA CHANCE (marcação de última hora,
+//                       sujeita a aprovação) continua valendo até o fechamento
+//                       definitivo — igual ao bloqueio automático
 //   "desbloqueado"   -> admin abriu exceção: marcação normal continua liberada
 //                       (o desbloqueio manual VENCE tudo)
 export type LockOverride = "bloqueado" | "desbloqueado" | null;
@@ -139,7 +142,8 @@ export type LockOverride = "bloqueado" | "desbloqueado" | null;
 // As três fases de uma refeição (fuso America/Sao_Paulo):
 //   "aberta"          -> marcar e desmarcar normalmente (até 4 dias antes, 23:59)
 //   "segunda_chance"  -> SÓ marcar, não desmarcar (de 4 dias antes até 1 dia
-//                        antes, 23:59); marcações aqui são "de última hora" e
+//                        antes, 23:59 — ou assim que o admin bloqueia
+//                        manualmente); marcações aqui são "de última hora" e
 //                        precisam de aprovação do admin para valer
 //   "fechada"         -> nada mais pode ser feito (a partir de 1 dia antes, 23:59)
 export type MealPhase = "aberta" | "segunda_chance" | "fechada";
@@ -152,7 +156,12 @@ export function mealPhase(
   nowStamp: string = nowSaoPauloStamp()
 ): MealPhase {
   if (lockOverride === "desbloqueado") return "aberta"; // exceção do admin
-  if (lockOverride === "bloqueado") return "fechada"; // trava manual
+  // Trava manual: pula direto para a segunda chance (o cadete não marca nem
+  // desmarca livremente, mas ainda pode SOLICITAR a refeição de última hora,
+  // sujeita à aprovação do admin). Depois do fechamento definitivo, fechada.
+  if (lockOverride === "bloqueado") {
+    return nowStamp < closeLockStamp(mealDateISO) ? "segunda_chance" : "fechada";
+  }
   if (nowStamp < autoLockStamp(mealDateISO)) return "aberta";
   if (nowStamp < closeLockStamp(mealDateISO)) return "segunda_chance";
   return "fechada";

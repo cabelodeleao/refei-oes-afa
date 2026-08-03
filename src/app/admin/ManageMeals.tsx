@@ -38,6 +38,8 @@ interface Slot {
 }
 
 // Situação de bloqueio de uma refeição, para escolher ícone/estilo/rótulo.
+// Em ambos os bloqueios (manual e automático) o cadete ainda pode SOLICITAR a
+// refeição de última hora — o pedido cai na aba de aprovações.
 //   "manual"    -> admin travou (lock_override = "bloqueado")
 //   "exception" -> admin liberou exceção (lock_override = "desbloqueado")
 //   "auto"      -> automático já bloqueou (prazo de 4 dias passou)
@@ -52,9 +54,17 @@ function lockKind(slot: Slot): LockKind {
 
 // Ícone + rótulo de cada situação (texto por extenso; a cor só reforça).
 const LOCK_BADGE: Record<LockKind, { icon: string; title: string }> = {
-  manual: { icon: "🔒", title: "Bloqueada manualmente" },
+  manual: {
+    icon: "🔒",
+    title:
+      "Bloqueada manualmente — o cadete ainda pode solicitar de última hora (sujeito a aprovação)",
+  },
   exception: { icon: "🔓", title: "Desbloqueada manualmente (exceção)" },
-  auto: { icon: "🔒", title: "Bloqueada automaticamente (prazo de 4 dias)" },
+  auto: {
+    icon: "🔒",
+    title:
+      "Bloqueada automaticamente (prazo de 4 dias) — o cadete ainda pode solicitar de última hora (sujeito a aprovação)",
+  },
   open: { icon: "", title: "Aberta para marcação" },
 };
 
@@ -323,7 +333,7 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
               className="btn-secondary px-2.5 py-1.5 text-xs"
               disabled={selected.size === 0}
               onClick={() => bulkOverride("bloqueado")}
-              title="Travar manualmente (independe da data)"
+              title="Travar manualmente (independe da data). O cadete ainda pode solicitar de última hora, sujeito à sua aprovação."
             >
               🔒 Bloquear
             </button>

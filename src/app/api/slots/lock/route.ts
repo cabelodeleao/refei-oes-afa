@@ -6,7 +6,9 @@ export const runtime = "nodejs";
 
 // PUT /api/slots/lock  (admin) — define a intenção manual de bloqueio de vários
 // slots. `override`:
-//   "bloqueado"    -> trava manualmente (independe da data)
+//   "bloqueado"    -> trava manualmente (independe da data). Encerra a marcação
+//                     normal, mas o cadete ainda pode solicitar a refeição de
+//                     última hora (sujeita à aprovação), igual ao automático.
 //   "desbloqueado" -> abre exceção: liberado mesmo que o automático bloquearia
 //   null           -> "Automático": volta a seguir a regra dos 4 dias
 export async function PUT(req: Request) {

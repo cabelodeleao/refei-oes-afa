@@ -413,6 +413,17 @@ body {
   border-color: rgba(255, 90, 90, 0.22);
   color: #9aa2b1;
 }
+/* Marcada e bloqueada (o prazo passou ou o admin bloqueou): a marcação vale,
+   mas não dá mais para desmarcar. VERDE + cadeado na pílula. */
+.cad-meal.locked-on {
+  background: rgba(20, 180, 140, 0.13);
+  border-color: rgba(20, 180, 140, 0.45);
+  color: #e8edf4;
+  cursor: not-allowed;
+}
+.cad-meal.locked-on .cad-meal-ic {
+  background: rgba(20, 180, 140, 0.22);
+}
 /* Segunda chance: marcação de última hora ainda disponível (AMARELO). */
 .cad-meal.late {
   background: rgba(240, 180, 40, 0.1);
