@@ -47,6 +47,64 @@ export function dateRange(fromISO: string, toISO: string): string[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Trimestres (calendário civil), usados no backup e na limpeza de registros:
+//   1º = janeiro a março · 2º = abril a junho
+//   3º = julho a setembro · 4º = outubro a dezembro
+// ---------------------------------------------------------------------------
+
+export interface Quarter {
+  year: number;
+  quarter: number; // 1 a 4
+  from: string; // primeiro dia (YYYY-MM-DD)
+  to: string; // último dia (YYYY-MM-DD)
+  label: string; // "3º trimestre de 2026 (julho a setembro)"
+}
+
+const QUARTER_MONTHS = ["janeiro a março", "abril a junho", "julho a setembro", "outubro a dezembro"];
+
+// Último dia do mês (mês 1-12), sem depender de tabela de dias.
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+export function quarterInfo(year: number, quarter: number): Quarter {
+  const q = Math.min(4, Math.max(1, quarter));
+  const firstMonth = (q - 1) * 3 + 1;
+  const lastMonth = firstMonth + 2;
+  const mm = (m: number) => String(m).padStart(2, "0");
+  return {
+    year,
+    quarter: q,
+    from: `${year}-${mm(firstMonth)}-01`,
+    to: `${year}-${mm(lastMonth)}-${mm(lastDayOfMonth(year, lastMonth))}`,
+    label: `${q}º trimestre de ${year} (${QUARTER_MONTHS[q - 1]})`,
+  };
+}
+
+// Em que trimestre cai uma data ISO.
+export function quarterOfDate(iso: string): { year: number; quarter: number } {
+  const [y, m] = iso.split("-").map(Number);
+  return { year: y, quarter: Math.floor((m - 1) / 3) + 1 };
+}
+
+// Os `count` trimestres mais recentes, do atual para trás.
+export function recentQuarters(count: number, todayISO = todaySaoPaulo()): Quarter[] {
+  const { year, quarter } = quarterOfDate(todayISO);
+  const out: Quarter[] = [];
+  let y = year;
+  let q = quarter;
+  for (let i = 0; i < count; i++) {
+    out.push(quarterInfo(y, q));
+    q -= 1;
+    if (q === 0) {
+      q = 4;
+      y -= 1;
+    }
+  }
+  return out;
+}
+
 // Segunda-feira da semana que contém `date`.
 export function startOfWeek(date: Date): Date {
   const d = new Date(date);

@@ -91,11 +91,28 @@ function hhmm(iso: string): string {
   });
 }
 
-export async function GET() {
+// GET /api/admin/export-all?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Sem from/to, exporta tudo (pode ficar pesado com muitos meses de histórico —
+// a tela usa o seletor de trimestre justamente para evitar isso).
+export async function GET(req: Request) {
   const session = await getSession();
   if (!session?.is_admin) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
+
+  const { searchParams } = new URL(req.url);
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+
+  // Filtro por período nas tabelas filhas: a data está em meal_slots, então
+  // filtramos pelo join (!inner) em vez de carregar tudo e descartar depois.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byPeriod = (q: any) => {
+    if (from) q = q.gte("meal_slots.date", from);
+    if (to) q = q.lte("meal_slots.date", to);
+    return q;
+  };
+  const join = from || to ? ", meal_slots!inner(date)" : "";
 
   let cadets: CadetRow[];
   let slots: SlotRow[];
@@ -109,19 +126,27 @@ export async function GET() {
     );
     slots = await selectAll<SlotRow>(
       "meal_slots",
-      "id, date, meal_type, squadrons"
+      "id, date, meal_type, squadrons",
+      (q) => {
+        if (from) q = q.gte("date", from);
+        if (to) q = q.lte("date", to);
+        return q;
+      }
     );
     marks = await selectAll<MarkRow>(
       "meal_marks",
-      "id, cadet_id, slot_id, attending"
+      `id, cadet_id, slot_id, attending${join}`,
+      byPeriod
     );
     entries = await selectAll<EntryRow>(
       "meal_entries",
-      "id, cadet_id, slot_id, entered_at"
+      `id, cadet_id, slot_id, entered_at${join}`,
+      byPeriod
     );
     attempts = await selectAll<AttemptRow>(
       "scan_attempts",
-      "id, cadet_id, slot_id, result, scanned_at, flagged_person, fiscal_note"
+      `id, cadet_id, slot_id, result, scanned_at, flagged_person, fiscal_note${join}`,
+      byPeriod
     );
   } catch {
     return NextResponse.json(
@@ -350,14 +375,16 @@ export async function GET() {
   }
 
   const buffer = await wb.xlsx.writeBuffer();
-  const fileDate = todaySaoPaulo();
+  // Nome do arquivo com o período exportado (ou a data de hoje, se for tudo).
+  const period =
+    from || to ? `${from ?? "inicio"}_a_${to ?? "hoje"}` : todaySaoPaulo();
 
   return new Response(buffer as ArrayBuffer, {
     status: 200,
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="backup-refeicoes-afa-${fileDate}.xlsx"`,
+      "Content-Disposition": `attachment; filename="backup-refeicoes-afa-${period}.xlsx"`,
       "Cache-Control": "no-store",
     },
   });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import { mealPhase } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -38,7 +39,7 @@ export async function PUT(req: Request) {
     .from("meal_slots")
     .update({ lock_override: override })
     .in("id", ids)
-    .select("id, lock_override");
+    .select("id, date, lock_override");
 
   if (error) {
     return NextResponse.json(
@@ -47,5 +48,28 @@ export async function PUT(req: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, updated: data });
+  // Refeições que VOLTARAM a ficar abertas (desbloqueio manual, ou volta ao
+  // automático ainda dentro do prazo): os pedidos de última hora que estavam
+  // esperando aprovação são aprovados na hora. Sem isto o cadete ficaria com a
+  // marcação "pendente" numa refeição aberta — o fiscal barraria a entrada dele
+  // e ele não entraria na contagem, sem ninguém entender o porquê.
+  let approved = 0;
+  const reopened = (data ?? [])
+    .filter((s) => mealPhase(s.lock_override, s.date) === "aberta")
+    .map((s) => s.id);
+
+  if (reopened.length > 0) {
+    const { data: fixed, error: approveErr } = await supabaseAdmin
+      .from("meal_marks")
+      .update({ late_approved: true })
+      .in("slot_id", reopened)
+      .eq("late_marking", true)
+      .eq("late_approved", false)
+      .select("id");
+    // Aprovação é complementar: se falhar, o bloqueio já foi salvo e o admin
+    // ainda pode aprovar na aba de aprovações.
+    if (!approveErr) approved = fixed?.length ?? 0;
+  }
+
+  return NextResponse.json({ ok: true, updated: data, approved });
 }
