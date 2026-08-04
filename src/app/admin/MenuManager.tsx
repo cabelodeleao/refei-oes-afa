@@ -8,6 +8,11 @@ import {
   MENU_IMAGES_DEFAULT,
   MENU_TITLE_SUGGESTIONS,
 } from "@/lib/constants";
+import {
+  compressImage,
+  formatBytes,
+  UPLOAD_TOTAL_LIMIT,
+} from "@/lib/image-compress";
 
 interface Menu {
   id: string;
@@ -18,14 +23,20 @@ interface Menu {
   created_at: string;
 }
 
-// Uma imagem escolhida para publicar (ainda não enviada).
+// Uma imagem escolhida para publicar (ainda não enviada). `file` já é a versão
+// COMPRIMIDA no navegador; `originalSize` guarda o tamanho da foto original só
+// para mostrar na tela o quanto ela encolheu.
 interface Pick {
   file: File;
   title: string;
   preview: string; // object URL
+  originalSize: number;
 }
 
-const MAX_BYTES = 5 * 1024 * 1024;
+// Teto do arquivo ORIGINAL que aceitamos abrir. É folgado de propósito: a
+// compressão no navegador derruba a foto para algumas centenas de KB antes de
+// enviar, então uma foto grande de celular passa sem problema.
+const MAX_BYTES = 25 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
 
 export default function MenuManager() {
@@ -39,6 +50,8 @@ export default function MenuManager() {
   const [mode, setMode] = useState<"substituir" | "adicionar">("substituir");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Comprimindo as fotos escolhidas (dura 1–2 segundos por imagem).
+  const [preparing, setPreparing] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -66,40 +79,57 @@ export default function MenuManager() {
   }, []);
 
   const active = menus.filter((m) => m.active);
+  // Tamanho do envio (já comprimido) e o original, para mostrar o ganho.
+  const totalBytes = picks.reduce((sum, p) => sum + p.file.size, 0);
+  const originalBytes = picks.reduce((sum, p) => sum + p.originalSize, 0);
 
   // Acrescenta arquivos à lista de publicação, já com um título sugerido
-  // (Sexta-feira, Sábado, Domingo…) que o admin pode trocar.
-  function addFiles(list: FileList | null) {
+  // (Sexta-feira, Sábado, Domingo…) que o admin pode trocar. Cada foto é
+  // COMPRIMIDA aqui no navegador antes de entrar na lista — é isso que faz o
+  // envio de várias imagens caber no limite da Vercel.
+  async function addFiles(list: FileList | null) {
     setError("");
     if (!list || list.length === 0) return;
     const incoming = Array.from(list);
+    if (fileInput.current) fileInput.current.value = ""; // permite reescolher
     const room = MAX_MENU_IMAGES - picks.length;
     if (room <= 0) {
       setError(`Você já selecionou o máximo de ${MAX_MENU_IMAGES} imagens.`);
       return;
     }
-    const accepted: Pick[] = [];
-    for (const f of incoming.slice(0, room)) {
-      if (!ALLOWED.includes(f.type)) {
-        setError(`“${f.name}”: formato inválido. Use JPG, PNG ou WEBP.`);
-        continue;
+
+    setPreparing(true);
+    try {
+      const accepted: Pick[] = [];
+      for (const f of incoming.slice(0, room)) {
+        if (!ALLOWED.includes(f.type)) {
+          setError(
+            f.type === "image/heic" || /\.heic$/i.test(f.name)
+              ? `“${f.name}”: formato HEIC do iPhone não é aceito. No iPhone: Ajustes → Câmera → Formatos → "Mais compatível".`
+              : `“${f.name}”: formato inválido. Use JPG, PNG ou WEBP.`
+          );
+          continue;
+        }
+        if (f.size > MAX_BYTES) {
+          setError(`“${f.name}”: arquivo grande demais (máx. 25 MB).`);
+          continue;
+        }
+        const compressed = await compressImage(f);
+        const index = picks.length + accepted.length;
+        accepted.push({
+          file: compressed,
+          title: MENU_TITLE_SUGGESTIONS[index] ?? `Imagem ${index + 1}`,
+          preview: URL.createObjectURL(compressed),
+          originalSize: f.size,
+        });
       }
-      if (f.size > MAX_BYTES) {
-        setError(`“${f.name}”: imagem muito grande (máx. 5 MB).`);
-        continue;
+      if (incoming.length > room) {
+        setError(`Só cabem mais ${room} imagem(ns) — o máximo é ${MAX_MENU_IMAGES}.`);
       }
-      const index = picks.length + accepted.length;
-      accepted.push({
-        file: f,
-        title: MENU_TITLE_SUGGESTIONS[index] ?? `Imagem ${index + 1}`,
-        preview: URL.createObjectURL(f),
-      });
+      if (accepted.length > 0) setPicks((prev) => [...prev, ...accepted]);
+    } finally {
+      setPreparing(false);
     }
-    if (incoming.length > room) {
-      setError(`Só cabem mais ${room} imagem(ns) — o máximo é ${MAX_MENU_IMAGES}.`);
-    }
-    if (accepted.length > 0) setPicks((prev) => [...prev, ...accepted]);
-    if (fileInput.current) fileInput.current.value = ""; // permite reescolher
   }
 
   function setTitle(i: number, title: string) {
@@ -141,6 +171,22 @@ export default function MenuManager() {
       setError("Informe o título de cada imagem.");
       return;
     }
+    // Rede de segurança: o servidor da Vercel recusa envios acima de ~4,5 MB
+    // antes mesmo de chegar no nosso código (o erro que apareceria seria um
+    // "erro de conexão" sem explicação). Depois da compressão isso praticamente
+    // não acontece, mas se acontecer o aviso é claro e diz o que fazer.
+    if (totalBytes > UPLOAD_TOTAL_LIMIT) {
+      setError(
+        picks.length === 1
+          ? `Esta imagem ficou com ${formatBytes(totalBytes)}, acima do limite de ` +
+            `${formatBytes(UPLOAD_TOTAL_LIMIT)} por envio. Tente uma versão menor ` +
+            `da foto (ou um print dela).`
+          : `As imagens somam ${formatBytes(totalBytes)} e o limite de um envio é ` +
+            `${formatBytes(UPLOAD_TOTAL_LIMIT)}. Publique metade agora e o resto ` +
+            `em seguida, usando "Acrescentar ao que já está no ar".`
+      );
+      return;
+    }
     setSaving(true);
     try {
       const fd = new FormData();
@@ -150,10 +196,17 @@ export default function MenuManager() {
         fd.append("titles", p.title.trim());
       }
       const res = await apiFetch("/api/menu-photo", { method: "POST", body: fd });
-      const data = await res.json();
+      // 413 vem do servidor da Vercel, sem JSON: o envio passou do limite antes
+      // de chegar no nosso código.
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(data.error ?? "Erro ao publicar.");
-        toast.error(data.error ?? "Erro ao publicar cardápio.");
+        const msg =
+          data?.error ??
+          (res.status === 413
+            ? "O envio ficou grande demais. Publique menos imagens de uma vez."
+            : "Erro ao publicar.");
+        setError(msg);
+        toast.error(msg);
         return;
       }
       reset();
@@ -212,20 +265,31 @@ export default function MenuManager() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-200">
-              Imagens (JPG, PNG ou WEBP — máx. 5 MB cada). Pode selecionar várias
-              de uma vez.
+              Imagens (JPG, PNG ou WEBP). Pode selecionar várias de uma vez —
+              pode mandar a foto direto do celular, do tamanho que ela for.
             </label>
             <input
               ref={fileInput}
               type="file"
               multiple
               accept="image/jpeg,image/png,image/webp"
+              disabled={preparing || saving}
               onChange={(e) => addFiles(e.target.files)}
-              className="block w-full text-sm text-slate-600 dark:text-gray-300 file:mr-3 file:cursor-pointer
+              className="block w-full text-sm text-slate-600 disabled:opacity-50 dark:text-gray-300 file:mr-3 file:cursor-pointer
                 file:rounded-lg file:border-0 file:bg-navy-600 file:px-4 file:py-2
                 file:text-sm file:font-semibold file:text-white hover:file:bg-navy-700"
             />
+            <p className="mt-1.5 text-xs text-slate-400 dark:text-gray-500">
+              As fotos são reduzidas aqui no seu aparelho antes de subir, para o
+              envio ser rápido e não estourar o limite do servidor.
+            </p>
           </div>
+
+          {preparing && (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-gray-700/40 dark:text-gray-300">
+              Preparando as imagens…
+            </p>
+          )}
 
           {/* Lista das imagens escolhidas, na ordem em que o cadete vai ver. */}
           {picks.length > 0 && (
@@ -244,12 +308,19 @@ export default function MenuManager() {
                     alt={`Pré-visualização: ${p.title}`}
                     className="h-16 w-16 shrink-0 rounded-lg bg-slate-50 object-cover ring-1 ring-slate-200 dark:bg-gray-900 dark:ring-gray-700"
                   />
-                  <input
-                    className="input flex-1"
-                    placeholder="Título (ex: Sexta-feira)"
-                    value={p.title}
-                    onChange={(e) => setTitle(i, e.target.value)}
-                  />
+                  <div className="min-w-0 flex-1">
+                    <input
+                      className="input w-full"
+                      placeholder="Título (ex: Sexta-feira)"
+                      value={p.title}
+                      onChange={(e) => setTitle(i, e.target.value)}
+                    />
+                    <p className="mt-1 text-xs text-slate-400 dark:text-gray-500">
+                      {p.file.size < p.originalSize
+                        ? `${formatBytes(p.originalSize)} → ${formatBytes(p.file.size)}`
+                        : formatBytes(p.file.size)}
+                    </p>
+                  </div>
                   <div className="flex shrink-0 gap-1">
                     <button
                       className="btn-ghost px-2 py-1.5 text-xs"
@@ -323,7 +394,7 @@ export default function MenuManager() {
             <button
               className="btn-success"
               onClick={publish}
-              disabled={saving || picks.length === 0}
+              disabled={saving || preparing || picks.length === 0}
             >
               {saving
                 ? "Publicando…"
@@ -337,6 +408,15 @@ export default function MenuManager() {
               </button>
             )}
           </div>
+
+          {picks.length > 0 && (
+            <p className="text-xs text-slate-400 dark:text-gray-500">
+              Envio: <strong>{formatBytes(totalBytes)}</strong>
+              {originalBytes > totalBytes && (
+                <> — as fotos originais somavam {formatBytes(originalBytes)}.</>
+              )}
+            </p>
+          )}
         </div>
       </section>
 
