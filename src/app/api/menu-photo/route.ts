@@ -11,9 +11,16 @@ const MAX_BYTES = 5 * 1024 * 1024; // 5 MB por imagem (limite do upload original
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 // Otimização para economizar Storage (Supabase Free = 1 GB):
-//   redimensiona p/ no máx. 1200px de largura (sem ampliar) e converte p/ WebP.
-const MAX_WIDTH = 1200;
-const WEBP_QUALITY = 80;
+//   redimensiona p/ no máx. 1920px de largura (sem ampliar) e converte p/ WebP.
+// As imagens são prints de tela (texto), então a largura e a qualidade são
+// altas de propósito: reduzir demais borra as letras quando o cadete amplia.
+const MAX_WIDTH = 1920;
+const WEBP_QUALITY = 88;
+
+// O navegador já comprime antes de enviar. Quando a imagem chega pronta —
+// WebP, dentro da largura e leve —, ela sobe como está: reencodar de novo só
+// degradaria o texto sem economizar quase nada ("perda de geração").
+const READY_MAX_BYTES = 1.2 * 1024 * 1024;
 
 // Quantos cardápios ANTIGOS (já desativados) manter no Storage. Os ativos nunca
 // são apagados pela limpeza automática, não importa quantos sejam.
@@ -208,11 +215,20 @@ export async function POST(req: Request) {
   for (const file of files) {
     let optimized: Buffer;
     try {
-      optimized = await sharp(Buffer.from(await file.arrayBuffer()))
-        .rotate() // respeita orientação EXIF antes de redimensionar
-        .resize({ width: MAX_WIDTH, withoutEnlargement: true })
-        .webp({ quality: WEBP_QUALITY })
-        .toBuffer();
+      const original = Buffer.from(await file.arrayBuffer());
+      const meta = await sharp(original).metadata();
+      const alreadyReady =
+        meta.format === "webp" &&
+        (meta.width ?? Infinity) <= MAX_WIDTH &&
+        original.length <= READY_MAX_BYTES;
+
+      optimized = alreadyReady
+        ? original
+        : await sharp(original)
+            .rotate() // respeita orientação EXIF antes de redimensionar
+            .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+            .webp({ quality: WEBP_QUALITY })
+            .toBuffer();
     } catch {
       await rollback();
       return NextResponse.json(

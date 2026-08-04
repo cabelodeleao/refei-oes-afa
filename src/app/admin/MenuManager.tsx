@@ -179,8 +179,8 @@ export default function MenuManager() {
       setError(
         picks.length === 1
           ? `Esta imagem ficou com ${formatBytes(totalBytes)}, acima do limite de ` +
-            `${formatBytes(UPLOAD_TOTAL_LIMIT)} por envio. Tente uma versão menor ` +
-            `da foto (ou um print dela).`
+            `${formatBytes(UPLOAD_TOTAL_LIMIT)} por envio. Tente recortar o print ` +
+            `ou salvá-lo em JPG antes de enviar.`
           : `As imagens somam ${formatBytes(totalBytes)} e o limite de um envio é ` +
             `${formatBytes(UPLOAD_TOTAL_LIMIT)}. Publique metade agora e o resto ` +
             `em seguida, usando "Acrescentar ao que já está no ar".`
@@ -265,8 +265,8 @@ export default function MenuManager() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-200">
-              Imagens (JPG, PNG ou WEBP). Pode selecionar várias de uma vez —
-              pode mandar a foto direto do celular, do tamanho que ela for.
+              Imagens (JPG, PNG ou WEBP). Pode selecionar várias de uma vez — o
+              print da tela serve direto, do tamanho que ele for.
             </label>
             <input
               ref={fileInput}
@@ -280,8 +280,9 @@ export default function MenuManager() {
                 file:text-sm file:font-semibold file:text-white hover:file:bg-navy-700"
             />
             <p className="mt-1.5 text-xs text-slate-400 dark:text-gray-500">
-              As fotos são reduzidas aqui no seu aparelho antes de subir, para o
-              envio ser rápido e não estourar o limite do servidor.
+              As imagens são otimizadas aqui no seu computador antes de subir,
+              mantendo a nitidez do texto — o envio fica rápido e não estoura o
+              limite do servidor.
             </p>
           </div>
 

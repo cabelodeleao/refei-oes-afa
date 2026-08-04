@@ -1,5 +1,8 @@
 // Compressão de imagem NO NAVEGADOR, antes de enviar ao servidor.
 //
+// O caso real de uso são PRINTS DE TELA do computador (PNG de 1 a 3 MB, cheios
+// de texto), não fotos de câmera.
+//
 // Por que isto existe: a Vercel corta qualquer envio acima de ~4,5 MB antes de
 // a requisição chegar no nosso código. Uma foto de celular tem de 2 a 5 MB, e
 // o cardápio manda várias de uma vez — sem comprimir aqui, publicar 3 fotos
@@ -9,8 +12,13 @@
 // O servidor continua comprimindo de novo (1200px, WebP q80): esta etapa é
 // para o arquivo CHEGAR lá, não substitui a otimização final.
 
-export const UPLOAD_MAX_WIDTH = 1600;
-export const UPLOAD_QUALITY = 0.8;
+// As imagens do cardápio são PRINTS DE TELA, ou seja, texto. Texto é o
+// conteúdo que mais sofre com compressão: se reduzir demais a largura ou a
+// qualidade, as letras "borram" quando o cadete amplia. Por isso mantemos a
+// largura original de um print comum (até 1920px) e a qualidade alta — mesmo
+// assim um print vira uns 300 KB em WebP, contra 1 a 3 MB do PNG.
+export const UPLOAD_MAX_WIDTH = 1920;
+export const UPLOAD_QUALITY = 0.9;
 
 // Teto prático de um envio para a Vercel (4,5 MB), com folga para os títulos e
 // o cabeçalho da requisição.
