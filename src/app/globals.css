@@ -266,6 +266,36 @@ body {
   border-radius: 4px;
   background: #3880ff;
 }
+/* No computador a imagem não precisa ocupar a largura toda: limita a altura,
+   centraliza e deixa a moldura invisível (a imagem "flutua" sobre o fundo).
+   No celular nada muda — quem clica amplia em tela cheia de qualquer jeito. */
+@media (min-width: 820px) {
+  .cad-menu-wrap {
+    max-width: 620px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .cad-menu-slide {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border-color: transparent;
+  }
+  .cad-menu-slide img {
+    width: auto;
+    max-width: 100%;
+    max-height: min(420px, 58vh);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  /* Com a imagem centralizada, a etiqueta do dia vai para o topo do centro. */
+  .cad-menu-tag {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
 /* Setas de navegação na tela cheia (desktop). */
 .cad-menu-nav {
   position: absolute;
