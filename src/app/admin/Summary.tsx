@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MEAL_SHORT,
   ALL_SQUADRONS,
@@ -41,22 +41,35 @@ interface Props {
 export default function Summary({ from, to, setFrom, setTo, readOnly }: Props) {
   const [slots, setSlots] = useState<SummarySlot[]>([]);
   const [loading, setLoading] = useState(false);
+  // Falha ao carregar precisa aparecer: sem isso a tabela fica vazia e parece
+  // que ninguém marcou nada.
+  const [loadError, setLoadError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [detail, setDetail] = useState<{
     slot: SummarySlot;
     squadron: number;
   } | null>(null);
 
+  // O período pode mudar logo após montar (intervalo salvo no localStorage),
+  // disparando dois carregamentos. A resposta do primeiro pode chegar depois
+  // da do segundo e sobrescrever a tabela com o período errado — este contador
+  // descarta as respostas atrasadas.
+  const reqSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++reqSeq.current;
     setLoading(true);
+    setLoadError("");
     try {
       const res = await apiFetch(`/api/marks/summary?from=${from}&to=${to}`);
       const data = await res.json();
-      if (res.ok) {
-        setSlots(data.slots ?? []);
-      }
+      if (seq !== reqSeq.current) return; // pedido antigo: ignora
+      if (res.ok) setSlots(data.slots ?? []);
+      else setLoadError(data?.error ?? "Não foi possível carregar o resumo.");
+    } catch {
+      if (seq === reqSeq.current) setLoadError("Erro de conexão ao carregar.");
     } finally {
-      setLoading(false);
+      if (seq === reqSeq.current) setLoading(false);
     }
   }, [from, to]);
 
@@ -229,7 +242,7 @@ export default function Summary({ from, to, setFrom, setTo, readOnly }: Props) {
                   </td>
                 </tr>
               ))}
-              {!loading && slots.length === 0 && (
+              {!loading && !loadError && slots.length === 0 && (
                 <tr>
                   <td colSpan={ALL_SQUADRONS.length + 2} className="px-4 py-8 text-center text-slate-400 dark:text-gray-500">
                     Nenhuma refeição no período selecionado
@@ -243,6 +256,17 @@ export default function Summary({ from, to, setFrom, setTo, readOnly }: Props) {
         {loading && (
           <div className="px-5 py-4 text-center text-sm text-slate-400 dark:text-gray-500">
             Carregando…
+          </div>
+        )}
+
+        {loadError && !loading && (
+          <div className="flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 px-5 py-4 text-center dark:border-gray-700">
+            <span className="text-sm text-red-600 dark:text-red-400">
+              {loadError}
+            </span>
+            <button className="btn-secondary px-3 py-1.5 text-xs" onClick={load}>
+              Tentar de novo
+            </button>
           </div>
         )}
       </section>

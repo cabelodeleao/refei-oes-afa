@@ -123,6 +123,9 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
   const toast = useToast();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(false);
+  // Falha ao carregar: precisa ficar VISÍVEL. Antes o erro era engolido e a
+  // grade aparecia vazia, como se não houvesse refeição criada nenhuma.
+  const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<{
     date: string;
@@ -131,14 +134,27 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
     existing?: Slot;
   } | null>(null);
 
+  // Ao abrir o painel, o período pode mudar logo depois de montar (o intervalo
+  // salvo no localStorage é restaurado). Isso dispara DOIS carregamentos, e a
+  // resposta do primeiro pode chegar DEPOIS da do segundo — aí a grade ficava
+  // com as refeições de um período e as linhas de outro, parecendo vazia até
+  // atualizar a página. Este contador descarta respostas atrasadas.
+  const reqSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++reqSeq.current;
     setLoading(true);
+    setLoadError("");
     try {
       const res = await apiFetch(`/api/slots?from=${from}&to=${to}`);
       const data = await res.json();
+      if (seq !== reqSeq.current) return; // pedido antigo: ignora
       if (res.ok) setSlots(data.slots ?? []);
+      else setLoadError(data?.error ?? "Não foi possível carregar as refeições.");
+    } catch {
+      if (seq === reqSeq.current) setLoadError("Erro de conexão ao carregar.");
     } finally {
-      setLoading(false);
+      if (seq === reqSeq.current) setLoading(false);
     }
   }, [from, to]);
 
@@ -501,6 +517,17 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
           {loading && (
             <div className="px-5 py-4 text-center text-sm text-slate-400">
               Carregando…
+            </div>
+          )}
+
+          {loadError && !loading && (
+            <div className="flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 px-5 py-4 text-center dark:border-gray-700">
+              <span className="text-sm text-red-600 dark:text-red-400">
+                {loadError}
+              </span>
+              <button className="btn-secondary px-3 py-1.5 text-xs" onClick={load}>
+                Tentar de novo
+              </button>
             </div>
           )}
         </section>
