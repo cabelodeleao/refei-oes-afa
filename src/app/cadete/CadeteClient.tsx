@@ -260,6 +260,12 @@ export default function CadeteClient({ user, qrToken }: Props) {
 
   const initial = (user.name.trim()[0] ?? "?").toUpperCase();
 
+  // Etiqueta "Obrigatória" ao lado do nome da refeição: só o 1º e o 2º
+  // Esquadrão veem. Para o 3º e o 4º ela é ruído — eles já tratam essa
+  // refeição como opcional pré-marcada há tempos. A COR verde continua
+  // valendo para os quatro (verde = obrigatória, azul = opcional).
+  const showReqTag = user.squadron === 1 || user.squadron === 2;
+
   // Card de um dia. readOnly = aba de antigas (sem "Todas", nada clicável —
   // os slots já chegam com locked=true do servidor e mostram 🔒 Sim/Não).
   function dayCard(date: string, daySlots: Slot[], readOnly: boolean) {
@@ -344,7 +350,8 @@ export default function CadeteClient({ user, qrToken }: Props) {
             //  fechada  -> cinza (verde/vermelho conforme a escolha travada)
             //  2ª chance p/ marcar -> AMARELO (última hora)
             //  marcada e bloqueada -> VERDE com cadeado (não pode desmarcar)
-            //  marcada  -> azul  ·  não marcada -> neutro
+            //  marcada  -> VERDE se obrigatória, AZUL se opcional
+            //  não marcada -> neutro
             const stateClass = latePending
               ? "late"
               : slot.phase === "fechada"
@@ -354,7 +361,9 @@ export default function CadeteClient({ user, qrToken }: Props) {
               : lockedMarked
               ? "locked-on"
               : slot.marked
-              ? "on"
+              ? obrigatoria
+                ? "on-req"
+                : "on"
               : "off";
 
             const right = latePending ? (
@@ -382,7 +391,7 @@ export default function CadeteClient({ user, qrToken }: Props) {
                     {MEAL_ICONS[mt]}
                   </span>
                   <span className="cad-meal-nm">{MEAL_LABELS[mt]}</span>
-                  {obrigatoria && (
+                  {obrigatoria && showReqTag && (
                     <span
                       className="cad-tag-req"
                       title="Refeição obrigatória — já vem marcada. Desmarque só se realmente não for comer."

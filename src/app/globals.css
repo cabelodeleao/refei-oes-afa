@@ -497,6 +497,13 @@ body {
   border-color: rgba(56, 128, 255, 0.45);
   color: #fff;
 }
+/* Obrigatória marcada: VERDE (a cor indica o estado — obrigatória = verde,
+   opcional = azul). Continua clicável: o cadete pode desmarcar. */
+.cad-meal.on-req {
+  background: rgba(20, 180, 140, 0.14);
+  border-color: rgba(20, 180, 140, 0.45);
+  color: #fff;
+}
 .cad-meal.blocked {
   background: rgba(255, 255, 255, 0.02);
   border-color: rgba(255, 255, 255, 0.06);
@@ -541,6 +548,9 @@ body {
 .cad-meal.on .cad-meal-ic {
   background: rgba(56, 128, 255, 0.22);
 }
+.cad-meal.on-req .cad-meal-ic {
+  background: rgba(20, 180, 140, 0.22);
+}
 .cad-meal.blocked .cad-meal-ic {
   background: rgba(255, 255, 255, 0.04);
   filter: grayscale(1);
@@ -555,13 +565,19 @@ body {
 .cad-meal.off .cad-pill-box {
   border: 1.5px solid rgba(255, 255, 255, 0.2);
 }
-.cad-meal.on .cad-pill-box {
-  background: #3b82f6;
+.cad-meal.on .cad-pill-box,
+.cad-meal.on-req .cad-pill-box {
   color: #fff;
   font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.cad-meal.on .cad-pill-box {
+  background: #3b82f6;
+}
+.cad-meal.on-req .cad-pill-box {
+  background: #14b48c;
 }
 /* Etiqueta "Obrigatória" ao lado do nome da refeição: a refeição já vem
    marcada, mas o cadete pode desmarcar se realmente não for comer. */
