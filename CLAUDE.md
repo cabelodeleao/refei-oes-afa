@@ -40,10 +40,11 @@ Armazenado como JSONB: `{ "1": "opcional", "2": "todos", "3": "ninguem", "4": "o
 
 ### Refeição obrigatória = opcional pré-marcada (TODOS os esquadrões)
 Quando uma refeição está como **"todos"** (obrigatória), para os 4 esquadrões:
-- aparece MARCADA por padrão, em VERDE (verde = obrigatória, azul = opcional)
+- aparece MARCADA por padrão
 - MAS o cadete pode desmarcar se realmente não for comer (opt-out)
-- a etiqueta "Obrigatória" ao lado do nome só aparece para o 1º e o 2º Esquadrão
-  (para o 3º e o 4º é ruído: eles já tratam essa refeição como pré-marcada)
+- o DESTAQUE de obrigatória (cor verde + etiqueta "Obrigatória" ao lado do nome)
+  só vale para o 1º e o 2º Esquadrão. Para o 3º e o 4º ela aparece igual a uma
+  opcional já marcada — azul e sem etiqueta, como sempre foi para eles.
 Antes só o 3º e o 4º ano podiam desmarcar; desde ago/2026 o 1º e o 2º também podem
 (a etiqueta "Obrigatória" continua aparecendo para todos).
 Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo,
