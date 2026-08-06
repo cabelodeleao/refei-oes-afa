@@ -3,7 +3,6 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import {
   getAccess,
-  isOptOutSquadron,
   SQUADRON_LABELS,
   type SquadronAccess,
 } from "@/lib/constants";
@@ -158,10 +157,8 @@ export async function POST(req: Request) {
   let reason = "";
 
   // Só precisamos consultar a escolha explícita do cadete (meal_marks) quando
-  // a refeição é "opcional" ou "todos" para 3º/4º (opt-out).
-  const needsMark =
-    access === "opcional" ||
-    (access === "todos" && isOptOutSquadron(cadet.squadron));
+  // o esquadrão dele tem direito à refeição ("opcional" ou "todos").
+  const needsMark = access !== "ninguem";
 
   let mark:
     | { attending: boolean; late_marking: boolean; late_approved: boolean }
@@ -185,13 +182,10 @@ export async function POST(req: Request) {
     // Opcional: precisa de opt-in explícito (attending=true).
     authorized = mark?.attending === true;
     if (!authorized) reason = "Não marcou esta refeição";
-  } else if (isOptOutSquadron(cadet.squadron)) {
-    // "todos" 3º/4º: autorizado, exceto se desmarcou (attending=false).
+  } else {
+    // "todos" (obrigatória): autorizado, exceto se desmarcou (attending=false).
     authorized = !(mark && mark.attending === false);
     if (!authorized) reason = "Desmarcou esta refeição";
-  } else {
-    // "todos" 1º/2º: obrigatória estrita, sempre autorizado.
-    authorized = true;
   }
 
   // Marcação de última hora (segunda chance) só vale APÓS o admin aprovar. Até

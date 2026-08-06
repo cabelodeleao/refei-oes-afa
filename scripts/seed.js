@@ -41,7 +41,7 @@ async function main() {
 
   const passwordHash = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
 
-  // Conta admin + cadetes. Todos com a mesma senha inicial.
+  // Conta admin + conta do rancho + cadetes. Todos com a mesma senha inicial.
   const rows = [
     {
       number: "admin",
@@ -50,6 +50,17 @@ async function main() {
       is_admin: true,
       password_hash: passwordHash,
       must_change_password: false, // admin não é forçado a trocar a senha
+    },
+    {
+      // Conta do rancho: entra com "rancho" (ou "Rancho") e só CONSULTA o
+      // painel de resumo. Não marca, não aprova, não edita nada.
+      number: "rancho",
+      name: "Rancho",
+      squadron: 0,
+      is_admin: false,
+      is_rancho: true,
+      password_hash: passwordHash,
+      must_change_password: false, // conta compartilhada: mantém a senha padrão
     },
     ...cadets.map((c) => ({
       number: c.number,

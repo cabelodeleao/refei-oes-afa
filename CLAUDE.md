@@ -38,11 +38,15 @@ Cada refeição (meal_slot) define, para cada esquadrão, um de três estados:
 - **"ninguem"** — refeição não disponível para o esquadrão
 Armazenado como JSONB: `{ "1": "opcional", "2": "todos", "3": "ninguem", "4": "opcional" }`
 
-### Exceção crítica do 3º e 4º ano
-Quando uma refeição está como **"todos"** (obrigatória):
-- 1º e 2º Esquadrão: obrigatório de verdade, não pode desmarcar
-- 3º e 4º Esquadrão: aparece marcada por padrão MAS o cadete PODE desmarcar (funciona como opcional pré-marcado)
-Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo, e exportação.
+### Refeição obrigatória = opcional pré-marcada (TODOS os esquadrões)
+Quando uma refeição está como **"todos"** (obrigatória), para os 4 esquadrões:
+- aparece MARCADA por padrão e leva a etiqueta "Obrigatória" no painel do cadete
+- MAS o cadete pode desmarcar se realmente não for comer (opt-out)
+Antes só o 3º e o 4º ano podiam desmarcar; desde ago/2026 o 1º e o 2º também podem
+(a etiqueta "Obrigatória" continua aparecendo para todos).
+Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo,
+fiscalização (quem desmarcou não entra) e exportação.
+No banco: sem linha em meal_marks = "Sim"; linha com attending=false = "Não".
 
 ### Senha e primeiro acesso
 - Senha inicial de todos: "123456"
@@ -56,7 +60,7 @@ Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo,
 - Fuso horário: sempre America/Sao_Paulo.
 
 ## Esquema do banco (principais tabelas)
-- **cadets**: id, number, name, squadron (0-4), password_hash, is_admin, is_fiscal, must_change_password, qr_token, password_changed_at, created_at. Tokens JWT emitidos antes de password_changed_at são rejeitados em getSession (troca/reset de senha derruba sessões antigas).
+- **cadets**: id, number, name, squadron (0-4), password_hash, is_admin, is_fiscal, is_rancho, must_change_password, qr_token, password_changed_at, created_at. Tokens JWT emitidos antes de password_changed_at são rejeitados em getSession (troca/reset de senha derruba sessões antigas).
 - **meal_slots**: id, date, meal_type ('cafe'/'almoco'/'janta'/'ceia'), squadrons (JSONB com estados por esquadrão), locked, created_at. UNIQUE(date, meal_type)
 - **meal_marks**: id, cadet_id, slot_id, created_at. UNIQUE(cadet_id, slot_id). Existência da linha = marcou "Sim".
 - **meal_entries**: registro oficial de entradas autorizadas (fiscalização). UNIQUE(cadet_id, slot_id)
@@ -67,8 +71,14 @@ Isso afeta: painel do cadete, validação no PUT /api/marks, contagem no resumo,
 - **Cadete**: marca refeições do próprio esquadrão, vê cardápio, tem QR code. Vai para /cadete.
 - **Fiscal**: conta separada (criada pelo admin, geralmente sargentos). Escaneia QR na entrada do rancho. Vai para /fiscal.
 - **Admin**: gerencia refeições, vê resumo, fiscalização, cardápio, cadetes, fiscais. Vai para /admin.
+- **Rancho**: conta única e compartilhada (login "rancho" ou "Rancho", `is_rancho=true`, squadron 0, senha 123456, NÃO é forçada a trocar). Vai para /rancho e só CONSULTA o painel de resumo (mesma tabela do admin, lista de nomes e exportação em Excel). Não aprova última hora, não cria/edita nada, não marca refeição. Guardas: `canViewSummary()` em /api/marks/summary, /detail e /export.
 
 ## Fiscalização por QR
+> **DESLIGADO no momento** (`QR_ENABLED = false` em `src/lib/constants.ts`): o cadete
+> não vê o botão "Meu QR" e o fiscal só registra entrada digitando o número do cadete
+> (a mesma validação do QR). Todo o código do QR continua no projeto — para religar,
+> basta voltar a constante para `true`.
+
 - Cada cadete tem um qr_token secreto (não falsificável). O QR contém esse token.
 - O fiscal seleciona a refeição que está fiscalizando e escaneia. Resultado em cores:
   - VERDE: marcou/tem direito, primeira passagem → registra entrada

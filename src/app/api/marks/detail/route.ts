@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { selectAll } from "@/lib/supabase";
-import { getSession } from "@/lib/auth";
+import { getSession, canViewSummary } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -9,12 +9,12 @@ interface CadetLite {
   name: string;
 }
 
-// GET /api/marks/detail?slot_id=UUID&squadron=N  (admin)
+// GET /api/marks/detail?slot_id=UUID&squadron=N  (admin e rancho)
 // Lista os cadetes de um esquadrão que marcaram "Sim" em um slot.
 // Carregado sob demanda (ao clicar no número no Resumo).
 export async function GET(req: Request) {
   const session = await getSession();
-  if (!session?.is_admin) {
+  if (!canViewSummary(session)) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 

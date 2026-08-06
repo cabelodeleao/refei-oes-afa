@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   const { data: cadet, error } = await supabaseAdmin
     .from("cadets")
     .select(
-      "id, number, name, squadron, is_admin, is_fiscal, password_hash, must_change_password"
+      "id, number, name, squadron, is_admin, is_fiscal, is_rancho, password_hash, must_change_password"
     )
     .eq("id", session.sub)
     .maybeSingle();
@@ -89,6 +89,7 @@ export async function POST(req: Request) {
     squadron: cadet.squadron,
     is_admin: cadet.is_admin,
     is_fiscal: cadet.is_fiscal ?? false,
+    is_rancho: cadet.is_rancho ?? false,
     must_change_password: false,
   });
 

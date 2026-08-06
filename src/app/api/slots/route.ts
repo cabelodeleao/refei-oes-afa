@@ -5,7 +5,6 @@ import {
   MEAL_TYPES,
   ACCESS_STATES,
   getAccess,
-  isOptOutSquadron,
   type MealType,
   type AccessState,
   type SquadronAccess,
@@ -138,22 +137,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Erro ao buscar marcações" }, { status: 500 });
   }
 
-  const optOut = isOptOutSquadron(session.squadron);
-
   return NextResponse.json({
     // Data de hoje no fuso de Brasília: o cadete usa para escrever "hoje" /
     // "amanhã" no aviso de bloqueio, sem depender do relógio do celular.
     today,
     slots: visible.map((s) => {
-      let marked: boolean;
-      if (s.access === "opcional") {
-        marked = optInSet.has(s.id); // default Não
-      } else if (optOut) {
-        // "todos" opt-out (3º/4º): default Sim, exceto se desmarcou.
-        marked = !optOutSet.has(s.id);
-      } else {
-        marked = true; // "todos" estrito (1º/2º)
-      }
+      // "opcional": default Não, marcada se o cadete disse Sim.
+      // "todos" (obrigatória): default Sim, exceto se o cadete desmarcou.
+      const marked =
+        s.access === "opcional"
+          ? optInSet.has(s.id)
+          : !optOutSet.has(s.id);
       // Fase da refeição para o cadete. Histórico é somente consulta e dias
       // passados nunca são editáveis (o PUT /api/marks também rejeita) — nesses
       // casos forçamos "fechada".

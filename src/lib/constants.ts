@@ -53,12 +53,10 @@ export const ACCESS_LABELS: Record<AccessState, string> = {
   ninguem: "Ninguém",
 };
 
-// Esquadrões em que "todos" funciona como "opt-out" (pré-marcado, mas o cadete
-// pode desmarcar): 3º (24/xxx) e 4º (23/xxx). Para 1º e 2º "todos" é estrito.
-export const OPT_OUT_SQUADRONS = [3, 4] as const;
-export function isOptOutSquadron(squadron: number): boolean {
-  return squadron === 3 || squadron === 4;
-}
+// Refeição "todos" (obrigatória) funciona como OPT-OUT para TODOS os
+// esquadrões: já aparece marcada por padrão e leva a etiqueta "Obrigatória",
+// mas o cadete pode desmarcar se não for comer.
+// (Antes só o 3º e o 4º podiam desmarcar; hoje o 1º e o 2º também podem.)
 
 // squadrons é um objeto JSONB: { "1": "opcional", "2": "todos", ... }
 export type SquadronAccess = Record<string, AccessState>;
@@ -106,3 +104,8 @@ export const WEEKDAYS = [
 ];
 
 export const COOKIE_NAME = "afa_token";
+
+// Fiscalização por QR code — DESLIGADA por enquanto (o cadete não vê o botão
+// "Meu QR" e o fiscal só registra entrada digitando o número do cadete). Todo
+// o código do QR continua no projeto: para religar, basta voltar para `true`.
+export const QR_ENABLED = false;

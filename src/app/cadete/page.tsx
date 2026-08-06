@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { randomBytes } from "crypto";
-import { getSession } from "@/lib/auth";
+import { getSession, homePath } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import CadeteClient from "./CadeteClient";
 
@@ -29,9 +29,10 @@ async function ensureQrToken(cadetId: string): Promise<string | null> {
 export default async function CadetePage() {
   const session = await getSession();
   if (!session) redirect("/");
-  if (session.is_admin) redirect("/admin");
-  // Fiscais (sargentos, squadron 0) não são cadetes e não marcam refeições.
-  if (session.is_fiscal) redirect("/fiscal");
+  // Só cadetes marcam refeições: admin, rancho e fiscal (sargentos, squadron 0)
+  // voltam cada um para a sua própria tela.
+  const home = homePath(session);
+  if (home !== "/cadete") redirect(home);
 
   const qrToken = await ensureQrToken(session.sub);
 

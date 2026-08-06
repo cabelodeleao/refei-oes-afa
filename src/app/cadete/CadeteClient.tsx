@@ -8,7 +8,7 @@ import {
   MEAL_LABELS,
   MEAL_ICONS,
   SQUADRON_LABELS,
-  isOptOutSquadron,
+  QR_ENABLED,
   type MealType,
   type AccessState,
 } from "@/lib/constants";
@@ -190,27 +190,17 @@ export default function CadeteClient({ user, qrToken }: Props) {
   const days = useMemo(() => groupDays(slots, true), [slots]);
   const histDays = useMemo(() => groupDays(histSlots ?? [], false), [histSlots]);
 
-  // 3º/4º esquadrão podem desmarcar refeições "todos" (opt-out).
-  const optOut = isOptOutSquadron(user.squadron);
-
-  // "todos" estrito (1º/2º) = obrigatória, o cadete nunca altera.
-  function isStrict(slot: Slot): boolean {
-    return slot.access === "todos" && !optOut;
-  }
-
   // Pode MARCAR (colocar "Sim") — vale na fase aberta E na segunda chance.
-  // Não vale para obrigatória estrita, refeição fechada, nem o que já está Sim.
+  // Não vale para refeição fechada nem para o que já está "Sim".
   function canMark(slot: Slot): boolean {
-    if (isStrict(slot)) return false;
     if (slot.phase === "fechada") return false;
     return !slot.marked;
   }
 
   // Pode DESMARCAR (colocar "Não") — SÓ na fase aberta (na segunda chance
-  // ninguém desmarca). Não vale para estrita nem para o que já está "Não".
+  // ninguém desmarca). Não vale para o que já está "Não".
   function canUnmark(slot: Slot): boolean {
     if (slot.phase !== "aberta") return false;
-    if (isStrict(slot)) return false;
     return slot.marked;
   }
 
@@ -338,7 +328,9 @@ export default function CadeteClient({ user, qrToken }: Props) {
         {MEAL_TYPES.filter((mt) => daySlots.some((s) => s.meal_type === mt)).map(
           (mt) => {
             const slot = daySlots.find((s) => s.meal_type === mt)!;
-            const strict = isStrict(slot);
+            // Refeição obrigatória: vem marcada e leva a etiqueta "Obrigatória",
+            // mas o cadete pode desmarcar se não for comer.
+            const obrigatoria = slot.access === "todos";
             const lateMark = isLateMarkable(slot); // 2ª chance, ainda dá p/ marcar
             const latePending = isLatePending(slot); // marcada, aguardando admin
             const clickable = canMark(slot) || canUnmark(slot);
@@ -350,7 +342,6 @@ export default function CadeteClient({ user, qrToken }: Props) {
             // Cor por situação (feedback redundante com o texto da pílula):
             //  última hora pendente -> AMARELO (só vira azul quando o admin aprova)
             //  fechada  -> cinza (verde/vermelho conforme a escolha travada)
-            //  estrita  -> verde "Obrigatória"
             //  2ª chance p/ marcar -> AMARELO (última hora)
             //  marcada e bloqueada -> VERDE com cadeado (não pode desmarcar)
             //  marcada  -> azul  ·  não marcada -> neutro
@@ -358,8 +349,6 @@ export default function CadeteClient({ user, qrToken }: Props) {
               ? "late"
               : slot.phase === "fechada"
               ? `blocked ${slot.marked ? "blocked-yes" : "blocked-no"}`
-              : strict
-              ? "lock"
               : lateMark
               ? "late"
               : lockedMarked
@@ -376,8 +365,6 @@ export default function CadeteClient({ user, qrToken }: Props) {
               >
                 🔒 {slot.marked ? "Sim" : "Não"}
               </span>
-            ) : strict ? (
-              <span className="cad-pill-req">Obrigatória</span>
             ) : lateMark ? (
               <span className="cad-pill-late">Marcar</span>
             ) : lockedMarked ? (
@@ -395,6 +382,14 @@ export default function CadeteClient({ user, qrToken }: Props) {
                     {MEAL_ICONS[mt]}
                   </span>
                   <span className="cad-meal-nm">{MEAL_LABELS[mt]}</span>
+                  {obrigatoria && (
+                    <span
+                      className="cad-tag-req"
+                      title="Refeição obrigatória — já vem marcada. Desmarque só se realmente não for comer."
+                    >
+                      Obrigatória
+                    </span>
+                  )}
                 </span>
                 {right}
               </>
@@ -554,8 +549,10 @@ export default function CadeteClient({ user, qrToken }: Props) {
         <div className="cad-foot">REFEIÇÕES AFA</div>
       </div>
 
-      {/* QR: botão flutuante + modal */}
-      <MyQrCode token={qrToken} name={user.name} number={user.number} />
+      {/* QR: botão flutuante + modal (desligado enquanto QR_ENABLED for false) */}
+      {QR_ENABLED && (
+        <MyQrCode token={qrToken} name={user.name} number={user.number} />
+      )}
 
       {/* Trocar senha (sheet escuro) */}
       {pwOpen && <ChangePasswordSheet onClose={() => setPwOpen(false)} />}

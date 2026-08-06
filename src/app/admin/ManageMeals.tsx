@@ -257,8 +257,10 @@ export default function ManageMeals({ from, to, setFrom, setTo }: Props) {
           com o header. Uma coluna no mobile. */}
       <div className="grid items-start gap-4 lg:grid-cols-[290px_auto] lg:justify-start">
         <CreatePanel
-          defaultFrom={from}
-          defaultTo={to}
+          from={from}
+          to={to}
+          setFrom={setFrom}
+          setTo={setTo}
           existing={slots}
           onCreated={(msg, ok = true) => {
             if (ok) {
@@ -889,20 +891,25 @@ function EditModal({
 
 // ---------------------------------------------------------------------------
 
+// O período deste painel é o MESMO da tabela "Refeições criadas" ao lado: ao
+// trocar a data aqui, a tabela já passa a mostrar exatamente os dias em que as
+// refeições vão ser criadas (não precisa procurar depois).
 function CreatePanel({
-  defaultFrom,
-  defaultTo,
+  from,
+  to,
+  setFrom,
+  setTo,
   existing,
   onCreated,
 }: {
-  defaultFrom: string;
-  defaultTo: string;
+  from: string;
+  to: string;
+  setFrom: (v: string) => void;
+  setTo: (v: string) => void;
   existing: Slot[];
   onCreated: (msg: string, ok?: boolean) => void;
 }) {
   const [open, setOpen] = useState(true);
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(defaultTo);
   const [config, setConfig] = useState<
     Record<MealType, { enabled: boolean; access: AccessMap }>
   >({

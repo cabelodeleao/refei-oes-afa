@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { supabaseAdmin } from "@/lib/supabase";
-import { signSession } from "@/lib/auth";
+import { signSession, homePath } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/constants";
 import {
   isAllowed,
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   }
 
   const CADET_COLUMNS =
-    "id, number, name, squadron, password_hash, is_admin, is_fiscal, must_change_password";
+    "id, number, name, squadron, password_hash, is_admin, is_fiscal, is_rancho, must_change_password";
 
   // Busca pelo número exatamente como digitado ("25/217", "admin"...).
   let { data: cadet, error } = await supabaseAdmin
@@ -61,6 +61,23 @@ export async function POST(req: Request) {
       .from("cadets")
       .select(CADET_COLUMNS)
       .eq("number", withSlash)
+      .maybeSingle();
+    if (retry.error) {
+      return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    }
+    cadet = retry.data;
+  }
+
+  // Identificadores de texto (contas "rancho", "admin", fiscais) aceitam
+  // maiúsculas/minúsculas: "Rancho" e "rancho" chegam na mesma conta.
+  // O texto com QUALQUER curinga de busca (% _ \ *) é recusado aqui: senão
+  // "a%" casaria com "admin" e daria para burlar o limite de tentativas
+  // (cada curinga diferente contaria como uma conta diferente).
+  if (!cadet && /[a-zA-Z]/.test(number) && !/[%_\\*]/.test(number)) {
+    const retry = await supabaseAdmin
+      .from("cadets")
+      .select(CADET_COLUMNS)
+      .ilike("number", number)
       .maybeSingle();
     if (retry.error) {
       return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
@@ -98,22 +115,18 @@ export async function POST(req: Request) {
     squadron: cadet.squadron,
     is_admin: cadet.is_admin,
     is_fiscal: cadet.is_fiscal ?? false,
+    is_rancho: cadet.is_rancho ?? false,
     must_change_password: mustChange,
   });
 
-  const redirect = mustChange
-    ? "/trocar-senha"
-    : cadet.is_admin
-      ? "/admin"
-      : cadet.is_fiscal
-        ? "/fiscal"
-        : "/cadete";
+  const redirect = mustChange ? "/trocar-senha" : homePath(cadet);
 
   const res = NextResponse.json({
     name: cadet.name,
     number: cadet.number,
     is_admin: cadet.is_admin,
     is_fiscal: cadet.is_fiscal ?? false,
+    is_rancho: cadet.is_rancho ?? false,
     redirect,
   });
 

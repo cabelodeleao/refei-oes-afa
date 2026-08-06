@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { selectAll } from "@/lib/supabase";
-import { getSession } from "@/lib/auth";
+import { getSession, canViewSummary } from "@/lib/auth";
 import {
   getAccess,
-  isOptOutSquadron,
   MEAL_TYPES,
   type MealType,
   type SquadronAccess,
@@ -24,10 +23,10 @@ interface SlotRow {
   lock_override: LockOverride;
 }
 
-// GET /api/marks/summary?from=YYYY-MM-DD&to=YYYY-MM-DD  (admin)
+// GET /api/marks/summary?from=YYYY-MM-DD&to=YYYY-MM-DD  (admin e rancho)
 export async function GET(req: Request) {
   const session = await getSession();
-  if (!session?.is_admin) {
+  if (!canViewSummary(session)) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
@@ -130,21 +129,14 @@ export async function GET(req: Request) {
         counts[sq] = n;
         total += n;
       } else if (state === "todos") {
-        if (isOptOutSquadron(sq)) {
-          // 3º/4º: todos comem menos quem desmarcou (opt-out) e menos as de
-          // última hora ainda pendentes (elas voltaram como attending=true).
-          const n =
-            (squadronTotals[sq] ?? 0) -
-            (optOut.get(key) ?? 0) -
-            (pendingLate.get(key) ?? 0);
-          counts[sq] = n;
-          total += n;
-        } else {
-          // 1º/2º: efetivo fixo (obrigatória estrita).
-          const n = squadronTotals[sq] ?? 0;
-          counts[sq] = n;
-          total += n;
-        }
+        // Obrigatória: todos comem menos quem desmarcou (opt-out) e menos as
+        // de última hora ainda pendentes (elas voltaram como attending=true).
+        const n =
+          (squadronTotals[sq] ?? 0) -
+          (optOut.get(key) ?? 0) -
+          (pendingLate.get(key) ?? 0);
+        counts[sq] = n;
+        total += n;
       }
       // "ninguem" não soma nada (sem entrada em counts).
     }

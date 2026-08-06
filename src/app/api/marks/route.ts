@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, selectAll } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
-import { getAccess, isOptOutSquadron } from "@/lib/constants";
+import { getAccess } from "@/lib/constants";
 import { todaySaoPaulo, mealPhase } from "@/lib/dates";
 
 export const runtime = "nodejs";
@@ -46,9 +46,9 @@ export async function PUT(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   }
-  if (session.is_admin) {
+  if (session.is_admin || session.is_rancho) {
     return NextResponse.json(
-      { error: "Administrador não marca refeições" },
+      { error: "Esta conta não marca refeições" },
       { status: 403 }
     );
   }
@@ -102,16 +102,9 @@ export async function PUT(req: Request) {
       { status: 403 }
     );
   }
-  // "todos" estrito (1º e 2º esq.): não pode alterar.
-  // "todos" opt-out (3º e 4º esq.): pode desmarcar, default é "Sim".
-  if (access === "todos" && !isOptOutSquadron(session.squadron)) {
-    return NextResponse.json(
-      { error: "Refeição obrigatória — não é possível desmarcar" },
-      { status: 409 }
-    );
-  }
-
-  const isOptOut = access === "todos"; // aqui só chega 3º/4º (estrito já barrado)
+  // "todos" (obrigatória) vale para todos os esquadrões como opt-out: já vem
+  // marcada, mas o cadete pode desmarcar se não for comer.
+  const isOptOut = access === "todos";
   const phase = mealPhase(slot.lock_override, slot.date);
 
   // Fase fechada: nada pode ser feito.

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { selectAll } from "@/lib/supabase";
-import { getSession } from "@/lib/auth";
+import { getSession, canViewSummary } from "@/lib/auth";
 import {
   MEAL_TYPES,
   MEAL_SHORT,
@@ -9,7 +9,6 @@ import {
   SQUADRON_LABELS,
   SQUADRON_SHORT,
   getAccess,
-  isOptOutSquadron,
   type MealType,
   type SquadronAccess,
 } from "@/lib/constants";
@@ -36,10 +35,10 @@ const YES_FILL = "FFECFDF5"; // verde bem claro — "Sim" (opcional marcado)
 const NINGUEM_FILL = "FFF1F5F9"; // cinza — esquadrão sem a refeição
 const LATE_FILL = "FFFEF3C7"; // amarelo — marcação de última hora (2ª chance)
 
-// GET /api/marks/export?from=YYYY-MM-DD&to=YYYY-MM-DD  (admin)
+// GET /api/marks/export?from=YYYY-MM-DD&to=YYYY-MM-DD  (admin e rancho)
 export async function GET(req: Request) {
   const session = await getSession();
-  if (!session?.is_admin) {
+  if (!canViewSummary(session)) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
@@ -194,9 +193,7 @@ export async function GET(req: Request) {
       return (optInCount.get(`${s.id}|${sq}`) ?? 0) - pending;
     if (state === "todos") {
       const roster = bySquadron.get(sq)!.length;
-      return isOptOutSquadron(sq)
-        ? roster - (optOutCount.get(`${s.id}|${sq}`) ?? 0) - pending
-        : roster;
+      return roster - (optOutCount.get(`${s.id}|${sq}`) ?? 0) - pending;
     }
     return 0; // ninguem
   };
@@ -278,40 +275,30 @@ export async function GET(req: Request) {
         const state = getAccess(s.squadrons, sq);
         const key = `${c.id}|${s.id}`;
         const late = lateInfo.get(key); // undefined = não é última hora
-        if (state === "todos" && !isOptOutSquadron(sq)) {
-          // 1º/2º: obrigatória estrita.
-          row[s.id] = "Obrigatória";
-        } else if (state === "todos") {
-          // 3º/4º: default "Sim", "Não" se desmarcou.
-          const attending = !optOutSet.has(key);
-          row[s.id] =
-            attending && late !== undefined
-              ? late
-                ? "Última hora (aprov.)"
-                : "Última hora (pend.)"
-              : attending
-              ? "Sim"
-              : "Não";
-        } else {
-          // opcional: "Sim" se marcou (opt-in).
-          const attending = optInSet.has(key);
-          row[s.id] =
-            attending && late !== undefined
-              ? late
-                ? "Última hora (aprov.)"
-                : "Última hora (pend.)"
-              : attending
-              ? "Sim"
-              : "Não";
-        }
+        // "todos" (obrigatória): default "Sim", vira "Não" se desmarcou.
+        // "opcional": "Sim" só se marcou (opt-in).
+        const attending =
+          state === "todos" ? !optOutSet.has(key) : optInSet.has(key);
+        row[s.id] =
+          attending && late !== undefined
+            ? late
+              ? "Última hora (aprov.)"
+              : "Última hora (pend.)"
+            : attending
+            ? "Sim"
+            : "Não";
       }
       const added = ws.addRow(row);
       sheetSlots.forEach((s, i) => {
         const cell = added.getCell(3 + i);
         const late = lateInfo.get(`${c.id}|${s.id}`);
         if (late !== undefined && cell.value !== "Não") cell.fill = solid(LATE_FILL);
-        else if (cell.value === "Obrigatória") cell.fill = solid(TODOS_FILL);
-        else if (cell.value === "Sim") cell.fill = solid(YES_FILL);
+        else if (cell.value === "Sim") {
+          // Verde mais forte quando a refeição é obrigatória, para o "Sim" de
+          // quem só não desmarcou se distinguir de quem marcou por vontade.
+          const obrigatoria = getAccess(s.squadrons, sq) === "todos";
+          cell.fill = solid(obrigatoria ? TODOS_FILL : YES_FILL);
+        }
         cell.alignment = { horizontal: "center" };
       });
     }
@@ -378,19 +365,18 @@ export async function GET(req: Request) {
         : a.number.localeCompare(b.number)
     );
 
-    // Situação de um cadete numa refeição: "Sim" (pode entrar), "Não",
-    // "Obrigatória" ou "—" (esquadrão sem a refeição). Última hora só conta se
-    // aprovada (mesma regra da fiscalização por QR).
+    // Situação de um cadete numa refeição: "Sim" (pode entrar), "Não" ou "—"
+    // (esquadrão sem a refeição). Última hora só conta se aprovada (mesma
+    // regra da fiscalização por QR).
     const statusFor = (c: CadetRow, s: SlotRow): string => {
       const state = getAccess(s.squadrons, c.squadron);
       if (state === "ninguem") return "—";
       const key = `${c.id}|${s.id}`;
       const pending = lateInfo.get(key) === false; // última hora não aprovada
-      if (state === "todos") {
-        if (!isOptOutSquadron(c.squadron)) return "Obrigatória";
-        return !optOutSet.has(key) && !pending ? "Sim" : "Não";
-      }
-      return optInSet.has(key) && !pending ? "Sim" : "Não"; // opcional
+      // Obrigatória: come, a menos que tenha desmarcado. Opcional: só se marcou.
+      const attending =
+        state === "todos" ? !optOutSet.has(key) : optInSet.has(key);
+      return attending && !pending ? "Sim" : "Não";
     };
 
     // --- Aba de dados (OCULTA): base das fórmulas de consulta ---
@@ -474,7 +460,7 @@ export async function GET(req: Request) {
       conf.getCell(`I${r}`).value = {
         formula:
           `IF(OR($G${r}="",$G${r}=0,$H${r}=0),"",` +
-          `IF(OR(INDEX(Dados!$A:$XFD,$G${r},$H${r})="Sim",INDEX(Dados!$A:$XFD,$G${r},$H${r})="Obrigatória"),"Sim","Não"))`,
+          `IF(INDEX(Dados!$A:$XFD,$G${r},$H${r})="Sim","Sim","Não"))`,
         result: "",
       };
       // Colunas visíveis: número, cadete e esquadrão resolvidos (confirmação).
@@ -614,7 +600,7 @@ export async function GET(req: Request) {
       // Resultado final: Foi / Faltou / Entrou sem marcar / (vazio).
       res.getCell(`D${r}`).value = {
         formula:
-          `IF(OR($G${r}="Sim",$G${r}="Obrigatória"),IF($H${r}=1,"Foi","Faltou"),` +
+          `IF($G${r}="Sim",IF($H${r}=1,"Foi","Faltou"),` +
           `IF($H${r}=1,"Entrou sem marcar",""))`,
         result: "",
       };
@@ -744,7 +730,7 @@ function addLegend(ws: ExcelJS.Worksheet, totalCols: number) {
   ws.mergeCells(l1.number, 1, l1.number, totalCols);
 
   const l2 = ws.addRow([
-    "Fundo verde = refeição obrigatória (todos do esquadrão)",
+    "Fundo verde = refeição obrigatória (efetivo do esquadrão menos quem desmarcou)",
   ]);
   l2.getCell(1).fill = solid(TODOS_FILL);
   ws.mergeCells(l2.number, 1, l2.number, totalCols);

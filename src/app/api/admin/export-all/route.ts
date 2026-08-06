@@ -8,7 +8,6 @@ import {
   SQUADRON_LABELS,
   SQUADRON_SHORT,
   getAccess,
-  isOptOutSquadron,
   type MealType,
   type SquadronAccess,
 } from "@/lib/constants";
@@ -209,9 +208,7 @@ export async function GET(req: Request) {
     if (state === "opcional") return optIn.get(`${s.id}|${sq}`) ?? 0;
     if (state === "todos") {
       const roster = rosterBySquadron.get(sq) ?? 0;
-      return isOptOutSquadron(sq)
-        ? roster - (optOut.get(`${s.id}|${sq}`) ?? 0)
-        : roster;
+      return roster - (optOut.get(`${s.id}|${sq}`) ?? 0);
     }
     return 0;
   };

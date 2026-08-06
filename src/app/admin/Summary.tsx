@@ -33,9 +33,12 @@ interface Props {
   to: string;
   setFrom: (v: string) => void;
   setTo: (v: string) => void;
+  // Conta do rancho: só consulta. Esconde a aprovação das marcações de última
+  // hora (a tabela em si já é somente leitura para todo mundo).
+  readOnly?: boolean;
 }
 
-export default function Summary({ from, to, setFrom, setTo }: Props) {
+export default function Summary({ from, to, setFrom, setTo, readOnly }: Props) {
   const [slots, setSlots] = useState<SummarySlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -118,7 +121,7 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
         </div>
       </section>
 
-      <LateApprovals from={from} to={to} onApproved={load} />
+      {!readOnly && <LateApprovals from={from} to={to} onApproved={load} />}
 
       <section className="card overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-4 dark:border-gray-700">
@@ -136,7 +139,7 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-3 w-3 rounded bg-emerald-100 ring-1 ring-emerald-300" />
-              Todos — obrigatória (efetivo do esquadrão)
+              Todos — obrigatória (efetivo menos quem desmarcou)
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-3 w-3 rounded bg-slate-100 ring-1 ring-slate-300" />
@@ -177,18 +180,13 @@ export default function Summary({ from, to, setFrom, setTo }: Props) {
                     const state = s.access[sq] ?? "ninguem";
 
                     if (state === "todos") {
-                      // Obrigatória: 1º/2º = efetivo fixo; 3º/4º = efetivo - opt-outs.
+                      // Obrigatória: efetivo do esquadrão menos quem desmarcou.
                       const eaters = s.counts[sq] ?? 0;
-                      const optOutSq = sq === 3 || sq === 4;
                       return (
                         <td key={sq} className="px-3 py-3 text-center">
                           <span
                             className="inline-block rounded-lg bg-emerald-100 px-2 py-1 font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200"
-                            title={
-                              optOutSq
-                                ? "Obrigatória (3º/4º podem desmarcar) — efetivo menos quem desmarcou"
-                                : "Obrigatória — todos do esquadrão"
-                            }
+                            title="Obrigatória (o cadete pode desmarcar) — efetivo do esquadrão menos quem desmarcou"
                           >
                             {eaters}
                           </span>

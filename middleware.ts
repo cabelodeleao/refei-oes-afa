@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { verifySession } from "@/lib/auth";
+import { verifySession, homePath } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/constants";
 
 // Rotas públicas (não exigem autenticação).
@@ -26,6 +26,9 @@ export async function middleware(req: NextRequest) {
   }
 
   const isFiscal = Boolean(session.is_fiscal || session.is_admin);
+  // Conta do rancho: só consulta o painel de resumo (/rancho).
+  const isRancho = Boolean(session.is_rancho || session.is_admin);
+  const home = homePath(session);
 
   // Troca de senha obrigatória (1º acesso de cadetes/fiscais; admin nunca).
   // Enquanto pendente, o usuário só acessa a tela de troca e as rotas
@@ -51,25 +54,20 @@ export async function middleware(req: NextRequest) {
   // Quem já trocou (ou o admin) não fica preso na tela de troca obrigatória.
   if (!mustChange && pathname === "/trocar-senha") {
     const url = req.nextUrl.clone();
-    url.pathname = session.is_admin ? "/admin" : isFiscal ? "/fiscal" : "/cadete";
+    url.pathname = home;
     return NextResponse.redirect(url);
   }
 
   // Controle de acesso por papel nas páginas
   if (pathname.startsWith("/admin") && !session.is_admin) {
     const url = req.nextUrl.clone();
-    url.pathname = isFiscal ? "/fiscal" : "/cadete";
+    url.pathname = home;
     return NextResponse.redirect(url);
   }
-  // /cadete é só para cadetes: admin vai p/ /admin, fiscal (sargento) p/ /fiscal.
-  if (pathname.startsWith("/cadete") && session.is_admin) {
+  // /cadete é só para cadetes: cada outro papel volta para a sua própria tela.
+  if (pathname.startsWith("/cadete") && home !== "/cadete") {
     const url = req.nextUrl.clone();
-    url.pathname = "/admin";
-    return NextResponse.redirect(url);
-  }
-  if (pathname.startsWith("/cadete") && session.is_fiscal && !session.is_admin) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/fiscal";
+    url.pathname = home;
     return NextResponse.redirect(url);
   }
 
@@ -82,7 +80,14 @@ export async function middleware(req: NextRequest) {
       return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
     }
     const url = req.nextUrl.clone();
-    url.pathname = "/cadete";
+    url.pathname = home;
+    return NextResponse.redirect(url);
+  }
+
+  // /rancho: só a conta do rancho (ou o admin).
+  if (pathname.startsWith("/rancho") && !isRancho) {
+    const url = req.nextUrl.clone();
+    url.pathname = home;
     return NextResponse.redirect(url);
   }
 
@@ -94,6 +99,7 @@ export const config = {
     "/cadete/:path*",
     "/admin/:path*",
     "/fiscal/:path*",
+    "/rancho/:path*",
     "/trocar-senha",
     "/api/slots/:path*",
     "/api/marks/:path*",

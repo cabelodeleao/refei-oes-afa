@@ -9,6 +9,8 @@ export interface SessionUser extends JWTPayload {
   squadron: number;
   is_admin: boolean;
   is_fiscal: boolean;
+  // Conta do rancho: só CONSULTA o painel de resumo (não altera nada).
+  is_rancho: boolean;
   // true => precisa trocar a senha padrão antes de usar o sistema (1º acesso).
   must_change_password: boolean;
 }
@@ -28,6 +30,7 @@ export interface SessionInput {
   squadron: number;
   is_admin: boolean;
   is_fiscal: boolean;
+  is_rancho: boolean;
   must_change_password: boolean;
 }
 
@@ -38,6 +41,7 @@ export async function signSession(user: SessionInput): Promise<string> {
     squadron: user.squadron,
     is_admin: user.is_admin,
     is_fiscal: user.is_fiscal,
+    is_rancho: user.is_rancho,
     must_change_password: user.must_change_password,
   })
     .setProtectedHeader({ alg: "HS256" })
@@ -45,6 +49,27 @@ export async function signSession(user: SessionInput): Promise<string> {
     .setIssuedAt()
     .setExpirationTime("30d")
     .sign(getSecret());
+}
+
+// Página inicial de cada papel (usada no login, no middleware e após a troca
+// de senha). A ordem importa: admin > rancho > fiscal > cadete.
+export function homePath(user: {
+  is_admin?: boolean;
+  is_rancho?: boolean;
+  is_fiscal?: boolean;
+}): string {
+  if (user.is_admin) return "/admin";
+  if (user.is_rancho) return "/rancho";
+  if (user.is_fiscal) return "/fiscal";
+  return "/cadete";
+}
+
+// Quem pode CONSULTAR o resumo de marcações: o admin e a conta do rancho.
+// A conta do rancho é somente leitura — não aprova, não cria, não edita nada.
+export function canViewSummary(
+  session: { is_admin?: boolean; is_rancho?: boolean } | null
+): boolean {
+  return Boolean(session && (session.is_admin || session.is_rancho));
 }
 
 export async function verifySession(

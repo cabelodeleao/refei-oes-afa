@@ -7,7 +7,6 @@ import {
   MEAL_SHORT,
   SQUADRON_SHORT,
   getAccess,
-  isOptOutSquadron,
   type MealType,
   type SquadronAccess,
 } from "@/lib/constants";
@@ -117,9 +116,7 @@ export async function GET(req: Request) {
       if (state === "opcional") total += optIn.get(`${s.id}|${sq}`) ?? 0;
       else if (state === "todos") {
         const roster = rosterBySquadron.get(sq) ?? 0;
-        total += isOptOutSquadron(sq)
-          ? roster - (optOut.get(`${s.id}|${sq}`) ?? 0)
-          : roster;
+        total += roster - (optOut.get(`${s.id}|${sq}`) ?? 0);
       }
     }
     return total;
@@ -130,8 +127,8 @@ export async function GET(req: Request) {
     if (state === "ninguem") return false;
     const attending = markByCadetSlot.get(`${s.id}|${c.id}`);
     if (state === "opcional") return attending === true;
-    if (isOptOutSquadron(c.squadron)) return attending !== false;
-    return true;
+    // "todos" (obrigatória): esperado, a menos que tenha desmarcado.
+    return attending !== false;
   };
 
   let entries: Array<{ cadet_id: string; slot_id: string; entered_at: string }> =

@@ -5,7 +5,7 @@ import type { Html5Qrcode } from "html5-qrcode";
 import LogoutButton from "@/components/LogoutButton";
 import ThemeToggle from "@/components/ThemeToggle";
 import { apiFetch } from "@/lib/client";
-import { MEAL_LABELS, type MealType } from "@/lib/constants";
+import { MEAL_LABELS, QR_ENABLED, type MealType } from "@/lib/constants";
 import { formatLongDate } from "@/lib/dates";
 
 interface Slot {
@@ -111,8 +111,11 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
   const [count, setCount] = useState(0);
   const [recent, setRecent] = useState<RecentItem[]>([]);
 
-  // Modo de leitura: câmera (QR) ou digitação do número (sem QR).
-  const [mode, setMode] = useState<"qr" | "manual">("qr");
+  // Modo de leitura: câmera (QR) ou digitação do número (sem QR). Com o QR
+  // desligado (QR_ENABLED=false) só existe a digitação do número.
+  const [mode, setMode] = useState<"qr" | "manual">(
+    QR_ENABLED ? "qr" : "manual"
+  );
   const [manualNumber, setManualNumber] = useState("");
   const [manualError, setManualError] = useState("");
   const manualInputRef = useRef<HTMLInputElement>(null);
@@ -501,7 +504,9 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
           )}
         </section>
 
-        {/* Alternador de modo: câmera (QR) x digitar o número (sem QR) */}
+        {/* Alternador de modo: câmera (QR) x digitar o número (sem QR).
+            Só aparece com o QR ligado; hoje o fiscal usa só o número. */}
+        {QR_ENABLED && (
         <div className="card flex gap-2 p-2">
           <button
             type="button"
@@ -526,6 +531,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
             ⌨️ Leitura sem QR Code
           </button>
         </div>
+        )}
 
         {/* Leitura sem QR: digitar o número que o cadete falar */}
         {mode === "manual" && (
@@ -605,7 +611,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
         )}
 
         {/* Câmera / resultado */}
-        {mode === "qr" && (
+        {QR_ENABLED && mode === "qr" && (
         <section className="card overflow-hidden">
           <div className="relative">
             {/* O elemento do leitor precisa existir (e não estar display:none)
@@ -681,15 +687,16 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
         </section>
         )}
 
-        {/* Anotação de fraude: QR já usado, possivelmente por outra pessoa */}
+        {/* Anotação de fraude: entrada já registrada, possivelmente por outra
+            pessoa usando o QR (ou o número) de um colega. */}
         {flagTarget && (
           <section className="card border-l-4 border-amber-500 animate-fade-in">
             <div className="rounded-t-2xl bg-amber-50 px-5 py-3 dark:bg-amber-500/10">
               <h3 className="flex items-center gap-2 text-sm font-bold text-amber-700 dark:text-amber-300">
-                ⚠ QR já usado
+                ⚠ {QR_ENABLED ? "QR já usado" : "Entrada já registrada"}
               </h3>
               <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-200/70">
-                Este QR é de{" "}
+                {QR_ENABLED ? "Este QR" : "Este número"} é de{" "}
                 <span className="font-semibold">{flagTarget.ownerName}</span> (
                 {flagTarget.ownerNumber}) e já entrou. Se quem está aqui é{" "}
                 <span className="font-semibold">outra pessoa</span>, registre
@@ -713,7 +720,7 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
               <div className="space-y-3 px-5 py-4">
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
-                    Quem está usando este QR? (nome ou número)
+                    Quem está tentando entrar? (nome ou número)
                   </label>
                   <CadetSuggest
                     value={flagPerson}
@@ -796,9 +803,10 @@ export default function FiscalClient({ user }: { user: { name: string } }) {
                 ) : (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500 dark:text-gray-400">
-                      Só para registrar uma ocorrência para apuração (ex.: sem QR
-                      e sem direito). NÃO conta como entrada. Para registrar uma
-                      entrada válida, use a “Leitura sem QR Code” acima.
+                      Só para registrar uma ocorrência para apuração (ex.: quis
+                      entrar sem ter direito). NÃO conta como entrada. Para
+                      registrar uma entrada válida, use o campo “Número do
+                      cadete” acima.
                     </p>
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-gray-300">
