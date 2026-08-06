@@ -115,21 +115,24 @@ export async function PUT(req: Request) {
     );
   }
 
-  // Estado atual do cadete (linha explícita ou default do modo).
-  const { data: existingRow, error: rowErr } = await supabaseAdmin
-    .from("meal_marks")
-    .select("attending, late_marking")
-    .eq("cadet_id", session.sub)
-    .eq("slot_id", slotId)
-    .maybeSingle();
-  if (rowErr) {
-    return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
-  }
-  const defaultAttending = isOptOut ? true : false; // opcional=>Não, opt-out=>Sim
-  const currentAttending = existingRow ? existingRow.attending : defaultAttending;
-
   // ---- Fase de segunda chance: SÓ pode marcar (aumentar presença) ----------
   if (phase === "segunda_chance") {
+    // O estado atual só é necessário AQUI (para saber se é mesmo um aumento de
+    // presença). Na fase aberta, que é o caso da esmagadora maioria das
+    // marcações, esta consulta seria desperdício — 625 cadetes marcando o mês
+    // todo passam por este ponto milhares de vezes.
+    const { data: existingRow, error: rowErr } = await supabaseAdmin
+      .from("meal_marks")
+      .select("attending, late_marking")
+      .eq("cadet_id", session.sub)
+      .eq("slot_id", slotId)
+      .maybeSingle();
+    if (rowErr) {
+      return NextResponse.json({ error: "Erro no servidor" }, { status: 500 });
+    }
+    const defaultAttending = isOptOut ? true : false; // opcional=>Não, opt-out=>Sim
+    const currentAttending = existingRow ? existingRow.attending : defaultAttending;
+
     if (marked === currentAttending) {
       // Sem mudança — idempotente.
       return NextResponse.json({ ok: true, slot_id: slotId, marked });

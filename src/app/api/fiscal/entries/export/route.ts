@@ -13,6 +13,8 @@ import {
 import { formatShortDate, todaySaoPaulo } from "@/lib/dates";
 
 export const runtime = "nodejs";
+// Excel da fiscalizacao do dia. O padrao da Vercel (10s) e curto demais com 625 cadetes.
+export const maxDuration = 60;
 
 interface SlotRow {
   id: string;

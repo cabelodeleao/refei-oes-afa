@@ -14,6 +14,8 @@ import {
 import { todaySaoPaulo } from "@/lib/dates";
 
 export const runtime = "nodejs";
+// Backup completo: le varias tabelas e monta o Excel. O padrao da Vercel (10s) e curto demais com 625 cadetes.
+export const maxDuration = 60;
 
 // ---------------------------------------------------------------------------
 // Backup completo do sistema em um único Excel (.xlsx), legível por humanos.

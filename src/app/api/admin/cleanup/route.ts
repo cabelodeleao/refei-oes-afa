@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth";
 import { todaySaoPaulo, quarterInfo, quarterOfDate } from "@/lib/dates";
 
 export const runtime = "nodejs";
+// Limpeza trimestral: apaga mes a mes, em cascata. O padrao da Vercel (10s) e curto demais com 625 cadetes.
+export const maxDuration = 60;
 
 // Palavra que o admin precisa digitar para confirmar a exclusão.
 const CONFIRM_WORD = "APAGAR";

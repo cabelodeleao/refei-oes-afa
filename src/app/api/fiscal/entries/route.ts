@@ -10,6 +10,8 @@ import {
 import { todaySaoPaulo } from "@/lib/dates";
 
 export const runtime = "nodejs";
+// Relatorio de fiscalizacao do dia (varias listas). O padrao da Vercel (10s) e curto demais com 625 cadetes.
+export const maxDuration = 60;
 
 interface SlotRow {
   id: string;

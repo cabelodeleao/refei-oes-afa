@@ -99,7 +99,9 @@ No banco: sem linha em meal_marks = "Sim"; linha com attending=false = "Não".
 - Marcação de refeição é otimista e instantânea (atualiza a UI na hora, salva em segundo plano). Sem delay, sem toast de sucesso.
 
 ## Restrições técnicas importantes
-- **Limite de 1000 linhas do Supabase**: PostgREST retorna no máximo 1000 linhas por query. Em qualquer query que possa passar disso (marcações, entradas, exportações), PAGINAR com .range() em loop. São 629 cadetes e milhares de marcações/entradas.
+- **Limite de 1000 linhas do Supabase**: PostgREST retorna no máximo 1000 linhas por query. Em qualquer query que possa passar disso (marcações, entradas, exportações), PAGINAR com .range() em loop (helper `selectAll`). São 629 cadetes e milhares de marcações/entradas.
+- **Nunca baixar linhas só para CONTAR.** Um mês de marcações passa de 30 mil linhas (≈30 idas ao banco). O Resumo usa a função SQL `resumo_marcacoes(p_from, p_to)`, que conta dentro do banco e devolve 4 linhas por refeição. Se a função não existir, `/api/marks/summary` cai sozinho no caminho antigo (paginado) — mais lento, mas correto. Agregação do PostgREST (`count()` no select) está DESABILITADA neste projeto do Supabase; por isso a função SQL.
+- **Rotas pesadas precisam de `export const maxDuration = 60`** — o padrão da Vercel (10s) não cobre export/backup/resumo com 629 cadetes.
 - Acesso ao banco é via service_role nas API routes (RLS habilitado com políticas permissivas).
 - A service_role key NUNCA deve vazar para o client.
 - Validações sempre no SERVIDOR (não confiar só no frontend): cadete só marca refeição do próprio esquadrão, não marca slot locked, respeita os estados.

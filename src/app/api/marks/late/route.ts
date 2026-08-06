@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth";
 import { MEAL_TYPES, type MealType } from "@/lib/constants";
 
 export const runtime = "nodejs";
+// Marcacoes de ultima hora do periodo. O padrao da Vercel (10s) e curto demais com 625 cadetes.
+export const maxDuration = 60;
 
 // Linha crua vinda do join meal_marks -> cadets + meal_slots.
 interface LateRow {
